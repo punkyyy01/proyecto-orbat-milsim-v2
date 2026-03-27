@@ -129,7 +129,7 @@ export function BulkImportMiembrosDialog({ open, onOpenChange, estructura }: Pro
         validas.map((f) => ({
           nombre_milsim: f.nombre_milsim,
           rango: f.rango,
-          rol: f.rol,
+          rol: f.rol ?? "",
           escuadra_id: f.escuadra_id,
         }))
       )
