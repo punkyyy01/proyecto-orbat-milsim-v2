@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useState, useTransition, useMemo } from "react"
 import { toast } from "sonner"
 import { Upload, CheckCircle2, XCircle, AlertCircle } from "lucide-react"
 import {
@@ -14,6 +14,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { RANKS } from "@/constants"
 import { importarMiembrosBulk } from "@/app/actions/personal"
 import type { RangoMilitar } from "@/lib/types/database"
+import type { EstructuraRegimiento } from "@/lib/supabase/queries"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -21,14 +22,31 @@ interface FilaParsed {
   nombre_milsim: string
   rango: RangoMilitar | null
   rol: string | null
+  escuadraNombre: string | null
+  escuadra_id: string | null
+  escuadraError: string | null
   error: string | null
 }
 
-// ─── Parser ───────────────────────────────────────────────────────────────────
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const RANGOS_VALIDOS = new Set(RANKS.map((r) => r.code))
 
-function parseLineas(raw: string): FilaParsed[] {
+function buildEscuadraMap(estructura: EstructuraRegimiento[]): Map<string, string> {
+  const map = new Map<string, string>()
+  for (const reg of estructura) {
+    for (const comp of reg.companias) {
+      for (const pel of comp.pelotones) {
+        for (const esc of pel.escuadras) {
+          map.set(esc.nombre.toLowerCase(), esc.id)
+        }
+      }
+    }
+  }
+  return map
+}
+
+function parseLineas(raw: string, escuadraMap: Map<string, string>): FilaParsed[] {
   return raw
     .split("\n")
     .map((line) => line.trim())
@@ -38,18 +56,38 @@ function parseLineas(raw: string): FilaParsed[] {
       const nombre_milsim = partes[0] ?? ""
       const rangoRaw = partes[1]?.toUpperCase() ?? ""
       const rol = partes[2] || null
+      const escuadraNombreRaw = partes[3] || null
 
       if (!nombre_milsim) {
-        return { nombre_milsim, rango: null, rol, error: "Nick requerido" }
+        return { nombre_milsim, rango: null, rol, escuadraNombre: escuadraNombreRaw, escuadra_id: null, escuadraError: null, error: "Nick requerido" }
       }
       if (!rangoRaw) {
-        return { nombre_milsim, rango: null, rol, error: "Rango requerido" }
+        return { nombre_milsim, rango: null, rol, escuadraNombre: escuadraNombreRaw, escuadra_id: null, escuadraError: null, error: "Rango requerido" }
       }
       if (!RANGOS_VALIDOS.has(rangoRaw)) {
-        return { nombre_milsim, rango: null, rol, error: `Rango inválido: ${rangoRaw}` }
+        return { nombre_milsim, rango: null, rol, escuadraNombre: escuadraNombreRaw, escuadra_id: null, escuadraError: null, error: `Rango inválido: ${rangoRaw}` }
       }
 
-      return { nombre_milsim, rango: rangoRaw as RangoMilitar, rol, error: null }
+      let escuadra_id: string | null = null
+      let escuadraError: string | null = null
+      if (escuadraNombreRaw) {
+        const found = escuadraMap.get(escuadraNombreRaw.toLowerCase())
+        if (found) {
+          escuadra_id = found
+        } else {
+          escuadraError = `Escuadra no encontrada: ${escuadraNombreRaw}`
+        }
+      }
+
+      return {
+        nombre_milsim,
+        rango: rangoRaw as RangoMilitar,
+        rol,
+        escuadraNombre: escuadraNombreRaw,
+        escuadra_id,
+        escuadraError,
+        error: null,
+      }
     })
 }
 
@@ -63,15 +101,20 @@ const textareaClass =
 interface Props {
   open: boolean
   onOpenChange: (open: boolean) => void
+  estructura: EstructuraRegimiento[]
 }
 
-export function BulkImportMiembrosDialog({ open, onOpenChange }: Props) {
+export function BulkImportMiembrosDialog({ open, onOpenChange, estructura }: Props) {
   const [texto, setTexto] = useState("")
   const [pending, startTransition] = useTransition()
 
-  const filas = texto.trim() ? parseLineas(texto) : []
-  const validas = filas.filter((f): f is FilaParsed & { rango: RangoMilitar } => !f.error && f.rango !== null)
-  const hayErrores = filas.some((f) => f.error)
+  const escuadraMap = useMemo(() => buildEscuadraMap(estructura), [estructura])
+
+  const filas = texto.trim() ? parseLineas(texto, escuadraMap) : []
+  const validas = filas.filter((f): f is FilaParsed & { rango: RangoMilitar } =>
+    !f.error && f.rango !== null
+  )
+  const hayErrores = filas.some((f) => f.error || f.escuadraError)
 
   function handleClose() {
     if (pending) return
@@ -83,12 +126,19 @@ export function BulkImportMiembrosDialog({ open, onOpenChange }: Props) {
     if (validas.length === 0) return
     startTransition(async () => {
       const result = await importarMiembrosBulk(
-        validas.map((f) => ({ nombre_milsim: f.nombre_milsim, rango: f.rango, rol: f.rol }))
+        validas.map((f) => ({
+          nombre_milsim: f.nombre_milsim,
+          rango: f.rango,
+          rol: f.rol,
+          escuadra_id: f.escuadra_id,
+        }))
       )
       if (result.error) {
         toast.error(result.error)
       } else {
-        toast.success(`${result.insertados} operador${result.insertados !== 1 ? "es" : ""} importado${result.insertados !== 1 ? "s" : ""}`)
+        toast.success(
+          `${result.insertados} operador${result.insertados !== 1 ? "es" : ""} importado${result.insertados !== 1 ? "s" : ""}`
+        )
         handleClose()
       }
     })
@@ -111,14 +161,22 @@ export function BulkImportMiembrosDialog({ open, onOpenChange }: Props) {
             style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)" }}
           >
             <p className="text-slate-500 mb-1 font-sans text-[11px] uppercase tracking-wider">Formato — una línea por operador</p>
-            <p><span className="text-blue-400">Nick</span>, <span className="text-green-400">RANGO</span>, <span className="text-slate-500">rol opcional</span></p>
-            <p className="text-slate-600 mt-1">Ej: Ghost, PVT, Fusilero</p>
-            <p className="text-slate-600">Rangos válidos: GEN LTG MG BG COL LTC MAJ CPT 1LT 2LT CW5–WO1 CSM SGM MSG 1SG SFC SSG SGT CPL SPC PFC PV2 PVT</p>
+            <p>
+              <span className="text-blue-400">Nick</span>
+              {", "}
+              <span className="text-green-400">RANGO</span>
+              {", "}
+              <span className="text-slate-500">rol opcional</span>
+              {", "}
+              <span className="text-amber-400">escuadra opcional</span>
+            </p>
+            <p className="text-slate-600 mt-1">Ej: Ghost, SGT, Fusilero, HYDRA 1-1</p>
+            <p className="text-slate-600">Rangos: GEN LTG MG BG COL LTC MAJ CPT 1LT 2LT CW5–WO1 CSM SGM MSG 1SG SFC SSG SGT CPL SPC PFC PV2 PVT</p>
           </div>
 
           <Textarea
             className={textareaClass}
-            placeholder={"Ghost, SGT, Fusilero\nDragon, CPL\nShadow, PVT, Médico de combate"}
+            placeholder={"Ghost, SGT, Fusilero, HYDRA 1-1\nDragon, CPL, , CHARLIE 1-2\nShadow, PVT"}
             value={texto}
             onChange={(e) => setTexto(e.target.value)}
           />
@@ -147,12 +205,29 @@ export function BulkImportMiembrosDialog({ open, onOpenChange }: Props) {
                     <span className="text-slate-300 flex-1 truncate font-medium">{fila.nombre_milsim || "—"}</span>
                     <span className="font-mono text-xs text-green-400 w-14 shrink-0">{fila.rango ?? "—"}</span>
                     {fila.rol && (
-                      <span className="text-slate-500 text-xs truncate max-w-[160px]">{fila.rol}</span>
+                      <span className="text-slate-500 text-xs truncate max-w-[120px]">{fila.rol}</span>
+                    )}
+                    {fila.escuadraNombre && (
+                      <span
+                        className={`text-xs font-mono px-1.5 py-0.5 rounded shrink-0 ${
+                          fila.escuadra_id
+                            ? "text-amber-400 bg-amber-500/10"
+                            : "text-red-400 bg-red-500/10"
+                        }`}
+                      >
+                        {fila.escuadraNombre}
+                      </span>
                     )}
                     {fila.error && (
                       <span className="text-red-400 text-xs shrink-0 flex items-center gap-1">
                         <AlertCircle className="w-3 h-3" />
                         {fila.error}
+                      </span>
+                    )}
+                    {!fila.error && fila.escuadraError && (
+                      <span className="text-amber-400 text-xs shrink-0 flex items-center gap-1">
+                        <AlertCircle className="w-3 h-3" />
+                        {fila.escuadraError}
                       </span>
                     )}
                   </div>
@@ -166,7 +241,7 @@ export function BulkImportMiembrosDialog({ open, onOpenChange }: Props) {
             {hayErrores && (
               <p className="text-xs text-amber-400 flex items-center gap-1.5">
                 <AlertCircle className="w-3.5 h-3.5" />
-                Las filas con error serán ignoradas
+                Las filas con error serán ignoradas; escuadras no encontradas se dejarán sin asignar
               </p>
             )}
             <div className="flex gap-2 ml-auto">
@@ -184,7 +259,9 @@ export function BulkImportMiembrosDialog({ open, onOpenChange }: Props) {
                 disabled={pending || validas.length === 0}
               >
                 <Upload className="w-3.5 h-3.5" />
-                {pending ? "Importando…" : `Importar ${validas.length > 0 ? validas.length : ""} operador${validas.length !== 1 ? "es" : ""}`}
+                {pending
+                  ? "Importando…"
+                  : `Importar ${validas.length > 0 ? validas.length : ""} operador${validas.length !== 1 ? "es" : ""}`}
               </Button>
             </div>
           </div>

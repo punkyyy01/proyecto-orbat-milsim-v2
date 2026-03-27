@@ -36,7 +36,7 @@ export function PersonalHeaderActions({ estructura, cursos, escuadraConteos }: P
         escuadraConteos={escuadraConteos}
       />
 
-      <BulkImportMiembrosDialog open={bulkOpen} onOpenChange={setBulkOpen} />
+      <BulkImportMiembrosDialog open={bulkOpen} onOpenChange={setBulkOpen} estructura={estructura} />
     </div>
   )
 }

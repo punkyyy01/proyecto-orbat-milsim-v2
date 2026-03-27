@@ -59,7 +59,7 @@ export async function crearMiembro(formData: FormData): Promise<ActionResult> {
 // ─── Importar miembros en masa ────────────────────────────────────────────────
 
 export async function importarMiembrosBulk(
-  filas: { nombre_milsim: string; rango: RangoMilitar; rol: string | null }[]
+  filas: { nombre_milsim: string; rango: RangoMilitar; rol: string | null; escuadra_id: string | null }[]
 ): Promise<{ insertados: number; error?: string }> {
   const supabase = await createClient()
   const { data, error } = await supabase
