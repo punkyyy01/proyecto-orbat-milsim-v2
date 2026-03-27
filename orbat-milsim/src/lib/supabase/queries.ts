@@ -383,7 +383,7 @@ export async function getMiembro(
 /**
  * Devuelve la jerarquía completa (regimientos > compañías > pelotones >
  * escuadras) sin miembros. Útil para selects en formularios.
- * Cacheado 60s — invalida con revalidateTag("estructura") tras mutaciones.
+ * Cacheado 60s — revalidate automático cada 60s.
  */
 export const getEstructura = unstable_cache(
   async (): Promise<EstructuraRegimiento[]> => {

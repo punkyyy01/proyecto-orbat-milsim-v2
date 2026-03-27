@@ -124,7 +124,7 @@ function MiembroForm({
   // ── Nick validation ──────────────────────────────────────────────────────────
   const [nickExists, setNickExists] = useState(false)
   const [checkingNick, setCheckingNick] = useState(false)
-  const nickCheckTimerRef = useRef<ReturnType<typeof setTimeout>>()
+  const nickCheckTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
   function handleNombreChange(value: string) {
     setNombre(value)
