@@ -218,7 +218,7 @@ function groupOrbatRows(rows: VistaOrbatRow[]): OrbatRegimiento[] {
         id: row.escuadra_id,
         nombre: row.escuadra_nombre!,
         indicativo_radio: row.escuadra_indicativo_radio,
-        max_miembros: row.escuadra_max_miembros ?? 5,
+        max_miembros: row.escuadra_max_miembros ?? 6,
         orden: row.escuadra_orden ?? 0,
         miembros: [],
       };
