@@ -266,7 +266,7 @@ function MiembroForm({
   const submitDisabled = pending || !nombre.trim() || !rango || nickExists
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+    <form onSubmit={handleSubmit} className="flex flex-col gap-5 px-6 pb-6">
       {/* ── Identidad ──────────────────────────────────────────────────────── */}
       <div className="space-y-4">
         <p className={sectionClass}>Identidad</p>
@@ -615,7 +615,7 @@ export function MiembroDialog({
         className="w-full border-l overflow-y-auto"
         style={{ background: "#111827", borderColor: "rgba(255,255,255,0.08)", maxWidth: "600px" }}
       >
-        <SheetHeader className="mb-6">
+        <SheetHeader className="mb-6 px-6">
           <SheetTitle className="text-slate-100 text-lg font-bold">
             {mode === "create" ? "Nuevo operador" : `Editar — ${miembro?.nombre_milsim}`}
           </SheetTitle>
