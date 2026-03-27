@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react"
 import { toast } from "sonner"
-import { Plus, Pencil, Trash2, BookOpen } from "lucide-react"
+import { Plus, Pencil, Trash2, BookOpen, Upload } from "lucide-react"
 import {
   Table,
   TableBody,
@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/dialog"
 import { crearCurso, actualizarCurso, eliminarCurso } from "@/app/actions/cursos"
 import type { CursoRow } from "@/lib/types/database"
+import { BulkImportCursosDialog } from "@/components/cursos/bulk-import-cursos-dialog"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -47,6 +48,7 @@ export function CursosContent({ cursos }: { cursos: CursoConConteo[] }) {
   const [dialog, setDialog] = useState<DialogState>(null)
   const [pending, startTransition] = useTransition()
   const [formError, setFormError] = useState<string | null>(null)
+  const [bulkOpen, setBulkOpen] = useState(false)
 
   function closeDialog() {
     setDialog(null)
@@ -191,15 +193,28 @@ export function CursosContent({ cursos }: { cursos: CursoConConteo[] }) {
         </div>
       )}
 
-      {/* Add button (always visible at bottom) */}
-      <Button
-        size="sm"
-        className="bg-blue-600 hover:bg-blue-500 text-white gap-1.5 h-8"
-        onClick={() => setDialog({ type: "create" })}
-      >
-        <Plus className="w-3.5 h-3.5" />
-        Nuevo curso
-      </Button>
+      {/* Add buttons */}
+      <div className="flex gap-2">
+        <Button
+          size="sm"
+          className="bg-blue-600 hover:bg-blue-500 text-white gap-1.5 h-8"
+          onClick={() => setDialog({ type: "create" })}
+        >
+          <Plus className="w-3.5 h-3.5" />
+          Nuevo curso
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          className="gap-1.5 h-8 border-white/10 text-slate-300 hover:text-slate-100 hover:bg-white/5"
+          onClick={() => setBulkOpen(true)}
+        >
+          <Upload className="w-3.5 h-3.5" />
+          Importar en masa
+        </Button>
+      </div>
+
+      <BulkImportCursosDialog open={bulkOpen} onOpenChange={setBulkOpen} />
 
       {/* ── Dialogs ─────────────────────────────────────────────────────────── */}
       <Dialog open={dialog !== null} onOpenChange={(o) => !o && closeDialog()}>

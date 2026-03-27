@@ -4,7 +4,7 @@ import { getMiembros, getEstructura } from "@/lib/supabase/queries"
 import type { RangoMilitar, CursoRow } from "@/lib/types/database"
 import { FiltrosPersonal } from "@/components/personal/filtros-personal"
 import { MiembrosTable } from "@/components/personal/miembros-table"
-import { MiembroDialog } from "@/components/personal/miembro-dialog"
+import { PersonalHeaderActions } from "@/components/personal/personal-header-actions"
 
 export const metadata: Metadata = { title: "Personal" }
 
@@ -71,8 +71,7 @@ export default async function PersonalPage({
             operador{membrosPage.count !== 1 ? "es" : ""} registrados
           </p>
         </div>
-        <MiembroDialog
-          mode="create"
+        <PersonalHeaderActions
           estructura={estructura}
           cursos={cursos}
           escuadraConteos={escuadraConteos}

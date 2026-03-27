@@ -43,6 +43,16 @@ export async function actualizarCurso(
   return { success: true }
 }
 
+export async function importarCursosBulk(
+  filas: { sigla: string; nombre: string; descripcion: string | null }[]
+): Promise<{ insertados: number; error?: string }> {
+  const supabase = await createClient()
+  const { data, error } = await supabase.from("cursos").insert(filas).select("id")
+  if (error) return { insertados: 0, error: error.message }
+  revalidatePath("/cursos")
+  return { insertados: data?.length ?? 0 }
+}
+
 export async function eliminarCurso(id: string): Promise<ActionResult> {
   const supabase = await createClient()
 

@@ -56,6 +56,21 @@ export async function crearMiembro(formData: FormData): Promise<ActionResult> {
   return { success: true }
 }
 
+// ─── Importar miembros en masa ────────────────────────────────────────────────
+
+export async function importarMiembrosBulk(
+  filas: { nombre_milsim: string; rango: RangoMilitar; rol: string | null }[]
+): Promise<{ insertados: number; error?: string }> {
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from("miembros")
+    .insert(filas.map((f) => ({ ...f, activo: true })))
+    .select("id")
+  if (error) return { insertados: 0, error: error.message }
+  revalidatePath("/personal")
+  return { insertados: data?.length ?? 0 }
+}
+
 // ─── Actualizar miembro ───────────────────────────────────────────────────────
 
 export async function actualizarMiembro(
