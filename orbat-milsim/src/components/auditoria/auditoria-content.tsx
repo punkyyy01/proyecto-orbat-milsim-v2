@@ -23,6 +23,7 @@ export type AuditLogEntry = {
   datos_anteriores: Json | null
   datos_nuevos: Json | null
   usuario_id: string | null
+  usuario_email: string | null
   created_at: string
 }
 
@@ -318,10 +319,12 @@ export function AuditoriaContent({ logs, total, page, pageSize, filtros }: Props
                         {log.accion}
                       </span>
                     </td>
-                    <td className="px-4 py-3 font-mono text-xs text-slate-500">
-                      {log.usuario_id
-                        ? log.usuario_id.slice(0, 8) + "…"
-                        : <span className="text-slate-700">sistema</span>
+                    <td className="px-4 py-3 text-xs text-slate-500">
+                      {log.usuario_email
+                        ? log.usuario_email
+                        : log.usuario_id
+                          ? <span className="font-mono">{log.usuario_id.slice(0, 8)}…</span>
+                          : <span className="text-slate-700">sistema</span>
                       }
                     </td>
                     <td className="px-4 py-3 text-slate-400 text-xs max-w-xs truncate">
@@ -399,7 +402,7 @@ export function AuditoriaContent({ logs, total, page, pageSize, filtros }: Props
               <div className="space-y-4 mt-2">
                 <div className="text-xs text-slate-500 space-y-0.5">
                   <p><span className="text-slate-600">ID registro:</span> <span className="font-mono">{selectedLog.registro_id}</span></p>
-                  <p><span className="text-slate-600">Usuario:</span> <span className="font-mono">{selectedLog.usuario_id ?? "sistema"}</span></p>
+                  <p><span className="text-slate-600">Usuario:</span> <span>{selectedLog.usuario_email ?? selectedLog.usuario_id ?? "sistema"}</span></p>
                 </div>
 
                 <div>

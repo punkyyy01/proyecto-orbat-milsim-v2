@@ -167,6 +167,17 @@ export async function cambiarRangoMiembro(
   return { success: true }
 }
 
+// ─── Obtener cursos completados de un miembro ────────────────────────────────
+
+export async function getCursosCompletadosMiembro(id: string): Promise<string[]> {
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from("miembro_cursos")
+    .select("curso_id")
+    .eq("miembro_id", id)
+  return (data ?? []).map((r) => r.curso_id)
+}
+
 // ─── Verificar nick duplicado (para validación en tiempo real) ────────────────
 
 export async function checkNickExiste(

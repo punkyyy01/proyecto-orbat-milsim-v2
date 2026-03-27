@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
 import { RANKS_BY_CATEGORY } from "@/constants"
-import { crearMiembro, actualizarMiembro, checkNickExiste } from "@/app/actions/personal"
+import { crearMiembro, actualizarMiembro, checkNickExiste, getCursosCompletadosMiembro } from "@/app/actions/personal"
 import type { MiembroRow, CursoRow } from "@/lib/types/database"
 import type { EstructuraRegimiento } from "@/lib/supabase/queries"
 
@@ -589,9 +589,27 @@ export function MiembroDialog({
   escuadraConteos,
 }: DialogProps) {
   const [open, setOpen] = useState(false)
+  // null = not yet loaded; string[] = ready to render form
+  const [cursosIniciales, setCursosIniciales] = useState<string[] | null>(
+    mode === "create" ? [] : null
+  )
+
+  async function handleOpenChange(next: boolean) {
+    if (!next) {
+      setOpen(false)
+      // Reset so next open refetches
+      if (mode === "edit") setCursosIniciales(null)
+      return
+    }
+    setOpen(true)
+    if (mode === "edit" && miembro) {
+      const ids = await getCursosCompletadosMiembro(miembro.id)
+      setCursosIniciales(ids)
+    }
+  }
 
   return (
-    <Sheet open={open} onOpenChange={setOpen}>
+    <Sheet open={open} onOpenChange={handleOpenChange}>
       <SheetTrigger asChild>
         {mode === "create" ? (
           <Button className="bg-blue-600 hover:bg-blue-500 text-white gap-1.5">
@@ -621,14 +639,20 @@ export function MiembroDialog({
           </SheetTitle>
         </SheetHeader>
 
-        <MiembroForm
-          miembro={miembro}
-          cursosCompletados={cursosCompletados}
-          estructura={estructura}
-          cursos={cursos}
-          escuadraConteos={escuadraConteos}
-          onClose={() => setOpen(false)}
-        />
+        {cursosIniciales !== null ? (
+          <MiembroForm
+            miembro={miembro}
+            cursosCompletados={cursosIniciales}
+            estructura={estructura}
+            cursos={cursos}
+            escuadraConteos={escuadraConteos}
+            onClose={() => setOpen(false)}
+          />
+        ) : (
+          <div className="flex items-center justify-center py-16">
+            <Loader2 className="w-5 h-5 animate-spin text-slate-500" />
+          </div>
+        )}
       </SheetContent>
     </Sheet>
   )
