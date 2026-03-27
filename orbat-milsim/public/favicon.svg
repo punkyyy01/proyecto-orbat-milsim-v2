@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Background -->
+  <rect width="32" height="32" rx="6" fill="#0f172a"/>
+  <!-- Shield shape -->
+  <path d="M16 4 L26 8 L26 16 C26 22 21 27 16 29 C11 27 6 22 6 16 L6 8 Z" fill="#1e3a5f" stroke="#3b82f6" stroke-width="1"/>
+  <!-- 5-pointed star -->
+  <polygon points="16,10 17.5,14.2 22,14.2 18.5,16.8 19.9,21 16,18.4 12.1,21 13.5,16.8 10,14.2 14.5,14.2" fill="#4ade80"/>
+</svg>
