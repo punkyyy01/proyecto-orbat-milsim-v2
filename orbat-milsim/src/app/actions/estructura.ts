@@ -325,3 +325,56 @@ export async function reordenarEscuadra(
   revalidatePath("/estructura")
   return { success: true }
 }
+
+// ─── Swap orden (drag & drop) ─────────────────────────────────────────────────
+
+export async function swapOrdenCompanias(
+  id1: string,
+  id2: string
+): Promise<ActionResult> {
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from("companias")
+    .select("id, orden")
+    .in("id", [id1, id2])
+  if (!data || data.length !== 2) return { error: "No encontrado" }
+  const [a, b] = data
+  await supabase.from("companias").update({ orden: b.orden }).eq("id", a.id)
+  await supabase.from("companias").update({ orden: a.orden }).eq("id", b.id)
+  revalidatePath("/estructura")
+  return { success: true }
+}
+
+export async function swapOrdenPelotones(
+  id1: string,
+  id2: string
+): Promise<ActionResult> {
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from("pelotones")
+    .select("id, orden")
+    .in("id", [id1, id2])
+  if (!data || data.length !== 2) return { error: "No encontrado" }
+  const [a, b] = data
+  await supabase.from("pelotones").update({ orden: b.orden }).eq("id", a.id)
+  await supabase.from("pelotones").update({ orden: a.orden }).eq("id", b.id)
+  revalidatePath("/estructura")
+  return { success: true }
+}
+
+export async function swapOrdenEscuadras(
+  id1: string,
+  id2: string
+): Promise<ActionResult> {
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from("escuadras")
+    .select("id, orden")
+    .in("id", [id1, id2])
+  if (!data || data.length !== 2) return { error: "No encontrado" }
+  const [a, b] = data
+  await supabase.from("escuadras").update({ orden: b.orden }).eq("id", a.id)
+  await supabase.from("escuadras").update({ orden: a.orden }).eq("id", b.id)
+  revalidatePath("/estructura")
+  return { success: true }
+}

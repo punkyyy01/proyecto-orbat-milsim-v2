@@ -7,11 +7,12 @@ import type {
   CompaniaConConteo,
   PelotonConConteo,
   EscuadraConConteo,
+  MiembroInline,
 } from "@/components/estructura/arbol-estructura"
 
 export const metadata: Metadata = { title: "Estructura" }
 
-// ─── Fetch member counts and merge into hierarchy ────────────────────────────
+// ─── Fetch member counts + names and merge into hierarchy ─────────────────────
 
 async function getEstructuraConConteos(): Promise<RegimientoConConteo[]> {
   const supabase = await createClient()
@@ -20,7 +21,8 @@ async function getEstructuraConConteos(): Promise<RegimientoConConteo[]> {
     getEstructura(),
     supabase
       .from("miembros")
-      .select("regimiento_id, compania_id, peloton_id, escuadra_id"),
+      .select("regimiento_id, compania_id, peloton_id, escuadra_id, nombre_milsim, rango, rol")
+      .order("nombre_milsim"),
   ])
 
   const miembros = miembrosResult.data ?? []
@@ -48,9 +50,18 @@ async function getEstructuraConConteos(): Promise<RegimientoConConteo[]> {
   const porPeloton: Record<string, number> = {}
   const porEscuadra: Record<string, number> = {}
 
+  // Member lists per escuadra for inline display
+  const miembrosPorEscuadra: Record<string, MiembroInline[]> = {}
+
   for (const m of miembros) {
     if (m.escuadra_id) {
       porEscuadra[m.escuadra_id] = (porEscuadra[m.escuadra_id] ?? 0) + 1
+      if (!miembrosPorEscuadra[m.escuadra_id]) miembrosPorEscuadra[m.escuadra_id] = []
+      miembrosPorEscuadra[m.escuadra_id].push({
+        nombre_milsim: m.nombre_milsim ?? "",
+        rango: m.rango ?? null,
+        rol: m.rol ?? null,
+      })
       const pelId = escuadraToPeloton[m.escuadra_id]
       if (pelId) {
         porPeloton[pelId] = (porPeloton[pelId] ?? 0) + 1
@@ -58,8 +69,7 @@ async function getEstructuraConConteos(): Promise<RegimientoConConteo[]> {
         if (compId) {
           porCompania[compId] = (porCompania[compId] ?? 0) + 1
           const regId = companiaToRegimiento[compId]
-          if (regId)
-            porRegimiento[regId] = (porRegimiento[regId] ?? 0) + 1
+          if (regId) porRegimiento[regId] = (porRegimiento[regId] ?? 0) + 1
         }
       }
     } else if (m.peloton_id) {
@@ -68,21 +78,18 @@ async function getEstructuraConConteos(): Promise<RegimientoConConteo[]> {
       if (compId) {
         porCompania[compId] = (porCompania[compId] ?? 0) + 1
         const regId = companiaToRegimiento[compId]
-        if (regId)
-          porRegimiento[regId] = (porRegimiento[regId] ?? 0) + 1
+        if (regId) porRegimiento[regId] = (porRegimiento[regId] ?? 0) + 1
       }
     } else if (m.compania_id) {
       porCompania[m.compania_id] = (porCompania[m.compania_id] ?? 0) + 1
       const regId = companiaToRegimiento[m.compania_id]
-      if (regId)
-        porRegimiento[regId] = (porRegimiento[regId] ?? 0) + 1
+      if (regId) porRegimiento[regId] = (porRegimiento[regId] ?? 0) + 1
     } else if (m.regimiento_id) {
-      porRegimiento[m.regimiento_id] =
-        (porRegimiento[m.regimiento_id] ?? 0) + 1
+      porRegimiento[m.regimiento_id] = (porRegimiento[m.regimiento_id] ?? 0) + 1
     }
   }
 
-  // Merge counts into hierarchy
+  // Merge counts and member lists into hierarchy
   return estructura.map(
     (reg): RegimientoConConteo => ({
       ...reg,
@@ -99,6 +106,7 @@ async function getEstructuraConConteos(): Promise<RegimientoConConteo[]> {
                 (esc): EscuadraConConteo => ({
                   ...esc,
                   total_miembros: porEscuadra[esc.id] ?? 0,
+                  miembros: miembrosPorEscuadra[esc.id] ?? [],
                 })
               ),
             })
@@ -114,19 +122,18 @@ async function getEstructuraConConteos(): Promise<RegimientoConConteo[]> {
 export default async function EstructuraPage() {
   const regimientos = await getEstructuraConConteos()
 
-  const totalUnidades =
-    regimientos.reduce(
-      (acc, r) =>
-        acc +
-        1 +
-        r.companias.length +
-        r.companias.reduce(
-          (a, c) =>
-            a + c.pelotones.length + c.pelotones.reduce((b, p) => b + p.escuadras.length, 0),
-          0
-        ),
-      0
-    )
+  const totalUnidades = regimientos.reduce(
+    (acc, r) =>
+      acc +
+      1 +
+      r.companias.length +
+      r.companias.reduce(
+        (a, c) =>
+          a + c.pelotones.length + c.pelotones.reduce((b, p) => b + p.escuadras.length, 0),
+        0
+      ),
+    0
+  )
 
   return (
     <div className="space-y-5">
