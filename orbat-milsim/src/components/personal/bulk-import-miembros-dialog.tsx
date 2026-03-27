@@ -131,7 +131,7 @@ export function BulkImportMiembrosDialog({ open, onOpenChange }: Props) {
               </p>
               <div
                 className="rounded-lg overflow-hidden divide-y text-sm"
-                style={{ border: "1px solid rgba(255,255,255,0.08)", divideColor: "rgba(255,255,255,0.05)" }}
+                style={{ border: "1px solid rgba(255,255,255,0.08)" }}
               >
                 {filas.map((fila, i) => (
                   <div
