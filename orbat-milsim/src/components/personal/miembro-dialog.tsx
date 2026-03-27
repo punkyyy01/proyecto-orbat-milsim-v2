@@ -612,8 +612,8 @@ export function MiembroDialog({
 
       <SheetContent
         side="right"
-        className="w-full sm:max-w-xl border-l overflow-y-auto"
-        style={{ background: "#111827", borderColor: "rgba(255,255,255,0.08)" }}
+        className="w-full border-l overflow-y-auto"
+        style={{ background: "#111827", borderColor: "rgba(255,255,255,0.08)", maxWidth: "600px" }}
       >
         <SheetHeader className="mb-6">
           <SheetTitle className="text-slate-100 text-lg font-bold">
