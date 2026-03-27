@@ -151,3 +151,21 @@ export async function cambiarRangoMiembro(
   revalidatePath("/personal")
   return { success: true }
 }
+
+// ─── Verificar nick duplicado (para validación en tiempo real) ────────────────
+
+export async function checkNickExiste(
+  nombre: string,
+  excludeId?: string
+): Promise<{ existe: boolean }> {
+  const supabase = await createClient()
+  let query = supabase
+    .from("miembros")
+    .select("id")
+    .ilike("nombre_milsim", nombre.trim())
+  if (excludeId) {
+    query = query.neq("id", excludeId)
+  }
+  const { data } = await query.limit(1)
+  return { existe: (data?.length ?? 0) > 0 }
+}

@@ -1,3 +1,4 @@
+import { unstable_cache } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type {
@@ -354,27 +355,27 @@ export async function getMiembro(
 ): Promise<MiembroConCursos | null> {
   const supabase = await createClient();
 
-  const { data: miembro, error: miembroError } = await supabase
-    .from("miembros")
-    .select("*")
-    .eq("id", id)
-    .single();
+  const [
+    { data: miembro, error: miembroError },
+    { data: miembroCursos, error: cursosError },
+  ] = await Promise.all([
+    supabase.from("miembros").select("*").eq("id", id).single(),
+    supabase
+      .from("miembro_cursos")
+      .select("*, curso:cursos(*)")
+      .eq("miembro_id", id)
+      .order("fecha_completado", { ascending: false }),
+  ]);
 
   if (miembroError) {
     if (miembroError.code === "PGRST116") return null; // not found
     throw new Error(`getMiembro: ${miembroError.message}`);
   }
 
-  const { data: miembroCursos, error: cursosError } = await supabase
-    .from("miembro_cursos")
-    .select("*, curso:cursos(*)")
-    .eq("miembro_id", id)
-    .order("fecha_completado", { ascending: false });
-
   if (cursosError) throw new Error(`getMiembro (cursos): ${cursosError.message}`);
 
   return {
-    ...miembro,
+    ...miembro!,
     cursos: (miembroCursos ?? []) as (MiembroCursoRow & { curso: CursoRow })[],
   };
 }
@@ -382,53 +383,58 @@ export async function getMiembro(
 /**
  * Devuelve la jerarquía completa (regimientos > compañías > pelotones >
  * escuadras) sin miembros. Útil para selects en formularios.
+ * Cacheado 60s — invalida con revalidateTag("estructura") tras mutaciones.
  */
-export async function getEstructura(): Promise<EstructuraRegimiento[]> {
-  const supabase = await createClient();
+export const getEstructura = unstable_cache(
+  async (): Promise<EstructuraRegimiento[]> => {
+    const supabase = createAdminClient();
 
-  const { data, error } = await supabase
-    .from("regimientos")
-    .select(
-      `
-      id, nombre, descripcion, comandante,
-      companias (
-        id, nombre, logo_url, orden,
-        pelotones (
-          id, nombre, orden,
-          escuadras (
-            id, nombre, indicativo_radio, max_miembros, orden
+    const { data, error } = await supabase
+      .from("regimientos")
+      .select(
+        `
+        id, nombre, descripcion, comandante,
+        companias (
+          id, nombre, logo_url, orden,
+          pelotones (
+            id, nombre, orden,
+            escuadras (
+              id, nombre, indicativo_radio, max_miembros, orden
+            )
           )
         )
+      `
       )
-    `
-    )
-    .order("nombre");
+      .order("nombre");
 
-  if (error) throw new Error(`getEstructura: ${error.message}`);
+    if (error) throw new Error(`getEstructura: ${error.message}`);
 
-  return (data ?? []).map((reg) => ({
-    id: reg.id,
-    nombre: reg.nombre,
-    descripcion: reg.descripcion,
-    comandante: reg.comandante,
-    companias: (reg.companias ?? [])
-      .sort((a, b) => a.orden - b.orden)
-      .map((comp) => ({
-        id: comp.id,
-        nombre: comp.nombre,
-        logo_url: comp.logo_url,
-        orden: comp.orden,
-        pelotones: (comp.pelotones ?? [])
-          .sort((a, b) => a.orden - b.orden)
-          .map((pel) => ({
-            id: pel.id,
-            nombre: pel.nombre,
-            orden: pel.orden,
-            escuadras: (pel.escuadras ?? []).sort((a, b) => a.orden - b.orden),
-          })),
-      })),
-  }));
-}
+    return (data ?? []).map((reg) => ({
+      id: reg.id,
+      nombre: reg.nombre,
+      descripcion: reg.descripcion,
+      comandante: reg.comandante,
+      companias: (reg.companias ?? [])
+        .sort((a, b) => a.orden - b.orden)
+        .map((comp) => ({
+          id: comp.id,
+          nombre: comp.nombre,
+          logo_url: comp.logo_url,
+          orden: comp.orden,
+          pelotones: (comp.pelotones ?? [])
+            .sort((a, b) => a.orden - b.orden)
+            .map((pel) => ({
+              id: pel.id,
+              nombre: pel.nombre,
+              orden: pel.orden,
+              escuadras: (pel.escuadras ?? []).sort((a, b) => a.orden - b.orden),
+            })),
+        })),
+    }));
+  },
+  ["estructura"],
+  { revalidate: 60, tags: ["estructura"] }
+);
 
 /**
  * Obtiene el rol de la aplicación del usuario autenticado actualmente.

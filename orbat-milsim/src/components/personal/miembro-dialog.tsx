@@ -1,8 +1,8 @@
 "use client"
 
-import { useState, useTransition, useMemo } from "react"
+import { useState, useTransition, useMemo, useRef, useEffect } from "react"
 import { toast } from "sonner"
-import { Pencil, Plus, Check, ChevronDown } from "lucide-react"
+import { Pencil, Plus, AlertTriangle, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
 import { RANKS_BY_CATEGORY } from "@/constants"
-import { crearMiembro, actualizarMiembro } from "@/app/actions/personal"
+import { crearMiembro, actualizarMiembro, checkNickExiste } from "@/app/actions/personal"
 import type { MiembroRow, CursoRow } from "@/lib/types/database"
 import type { EstructuraRegimiento } from "@/lib/supabase/queries"
 
@@ -53,65 +53,33 @@ const ROLES_COMUNES = [
   "Zapador",
 ]
 
-type Nivel = "none" | "regimiento" | "compania" | "peloton" | "escuadra"
-
-interface UnitOption {
-  id: string
-  label: string
-}
-
 // ─── Cascade helpers ──────────────────────────────────────────────────────────
 
-function getUnidadOptions(
-  nivel: Nivel,
+/** Dado un miembro, retorna los IDs de compañía, pelotón y escuadra */
+function detectCascadeIds(
+  m: MiembroRow | undefined,
   estructura: EstructuraRegimiento[]
-): UnitOption[] {
-  if (nivel === "none") return []
+): { companiaId: string; pelotonId: string; escuadraId: string } {
+  if (!m) return { companiaId: "", pelotonId: "", escuadraId: "" }
 
-  if (nivel === "regimiento") {
-    return estructura.map((r) => ({ id: r.id, label: r.nombre }))
+  for (const reg of estructura) {
+    for (const comp of reg.companias) {
+      if (m.compania_id === comp.id && !m.peloton_id && !m.escuadra_id) {
+        return { companiaId: comp.id, pelotonId: "", escuadraId: "" }
+      }
+      for (const pel of comp.pelotones) {
+        if (m.peloton_id === pel.id && !m.escuadra_id) {
+          return { companiaId: comp.id, pelotonId: pel.id, escuadraId: "" }
+        }
+        for (const esc of pel.escuadras) {
+          if (m.escuadra_id === esc.id) {
+            return { companiaId: comp.id, pelotonId: pel.id, escuadraId: esc.id }
+          }
+        }
+      }
+    }
   }
-
-  if (nivel === "compania") {
-    return estructura.flatMap((r) =>
-      r.companias.map((c) => ({ id: c.id, label: `${r.nombre} › ${c.nombre}` }))
-    )
-  }
-
-  if (nivel === "peloton") {
-    return estructura.flatMap((r) =>
-      r.companias.flatMap((c) =>
-        c.pelotones.map((p) => ({
-          id: p.id,
-          label: `${c.nombre} › ${p.nombre}`,
-        }))
-      )
-    )
-  }
-
-  if (nivel === "escuadra") {
-    return estructura.flatMap((r) =>
-      r.companias.flatMap((c) =>
-        c.pelotones.flatMap((p) =>
-          p.escuadras.map((e) => ({
-            id: e.id,
-            label: `${c.nombre} › ${p.nombre} › ${e.nombre}`,
-          }))
-        )
-      )
-    )
-  }
-
-  return []
-}
-
-/** Detect the current unit assignment level and id from a member row */
-function detectNivelActual(m: MiembroRow): { nivel: Nivel; unidadId: string } {
-  if (m.escuadra_id) return { nivel: "escuadra", unidadId: m.escuadra_id }
-  if (m.peloton_id) return { nivel: "peloton", unidadId: m.peloton_id }
-  if (m.compania_id) return { nivel: "compania", unidadId: m.compania_id }
-  if (m.regimiento_id) return { nivel: "regimiento", unidadId: m.regimiento_id }
-  return { nivel: "none", unidadId: "" }
+  return { companiaId: "", pelotonId: "", escuadraId: "" }
 }
 
 // ─── Form ────────────────────────────────────────────────────────────────────
@@ -121,6 +89,8 @@ interface FormProps {
   cursosCompletados?: string[]
   estructura: EstructuraRegimiento[]
   cursos: CursoRow[]
+  /** Conteo de miembros activos por escuadra_id */
+  escuadraConteos?: Record<string, number>
   onClose: () => void
 }
 
@@ -129,41 +99,89 @@ function MiembroForm({
   cursosCompletados = [],
   estructura,
   cursos,
+  escuadraConteos = {},
   onClose,
 }: FormProps) {
   const isEdit = !!miembro
   const [pending, startTransition] = useTransition()
+  const submitModeRef = useRef<"close" | "another">("close")
 
-  // ── Form state ──────────────────────────────────────────────────────────────
-  const [nombre, setNombre] = useState(miembro?.nombre_milsim ?? "")
-  const [rango, setRango] = useState(miembro?.rango ?? "")
-  const [rol, setRol] = useState(miembro?.rol ?? "")
+  // ── Identidad ────────────────────────────────────────────────────────────────
+  const [nombre, setNombre] = useState(
+    miembro !== undefined ? miembro.nombre_milsim : ""
+  )
+  const [rango, setRango] = useState<string>(
+    miembro !== undefined ? miembro.rango : "PVT"
+  )
+  const [rol, setRol] = useState<string>(
+    miembro !== undefined ? (miembro.rol ?? "") : "Fusilero"
+  )
   const [discordId, setDiscordId] = useState(miembro?.discord_id ?? "")
   const [steamId, setSteamId] = useState(miembro?.steam_id ?? "")
   const [activo, setActivo] = useState(miembro?.activo ?? true)
   const [notas, setNotas] = useState(miembro?.notas_admin ?? "")
+
+  // ── Nick validation ──────────────────────────────────────────────────────────
+  const [nickExists, setNickExists] = useState(false)
+  const [checkingNick, setCheckingNick] = useState(false)
+  const nickCheckTimerRef = useRef<ReturnType<typeof setTimeout>>()
+
+  function handleNombreChange(value: string) {
+    setNombre(value)
+    clearTimeout(nickCheckTimerRef.current)
+    const trimmed = value.trim()
+    // No check needed if empty or same as current member's nick
+    if (!trimmed || trimmed.toLowerCase() === miembro?.nombre_milsim.toLowerCase()) {
+      setNickExists(false)
+      setCheckingNick(false)
+      return
+    }
+    setCheckingNick(true)
+    nickCheckTimerRef.current = setTimeout(async () => {
+      const result = await checkNickExiste(trimmed, miembro?.id)
+      setNickExists(result.existe)
+      setCheckingNick(false)
+    }, 500)
+  }
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => clearTimeout(nickCheckTimerRef.current)
+  }, [])
+
+  // ── Cascade assignment ───────────────────────────────────────────────────────
+  const initialCascade = useMemo(
+    () => detectCascadeIds(miembro, estructura),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  )
+  const [companiaId, setCompaniaId] = useState(initialCascade.companiaId)
+  const [pelotonId, setPelotonId] = useState(initialCascade.pelotonId)
+  const [escuadraId, setEscuadraId] = useState(initialCascade.escuadraId)
+
+  function handleCompaniaChange(val: string) {
+    setCompaniaId(val)
+    setPelotonId("")
+    setEscuadraId("")
+  }
+  function handlePelotonChange(val: string) {
+    setPelotonId(val)
+    setEscuadraId("")
+  }
+
+  const todasCompanias = useMemo(
+    () => estructura.flatMap((r) => r.companias),
+    [estructura]
+  )
+  const compSeleccionada = todasCompanias.find((c) => c.id === companiaId)
+  const pelotones = compSeleccionada?.pelotones ?? []
+  const pelSeleccionado = pelotones.find((p) => p.id === pelotonId)
+  const escuadras = pelSeleccionado?.escuadras ?? []
+
+  // ── Cursos ───────────────────────────────────────────────────────────────────
   const [cursosSeleccionados, setCursosSeleccionados] = useState<Set<string>>(
     () => new Set(cursosCompletados)
   )
-
-  const { nivel: nivelInicial, unidadId: unidadInicial } = miembro
-    ? detectNivelActual(miembro)
-    : { nivel: "none" as Nivel, unidadId: "" }
-
-  const [nivel, setNivel] = useState<Nivel>(nivelInicial)
-  const [unidadId, setUnidadId] = useState(unidadInicial)
-  const [error, setError] = useState<string | null>(null)
-
-  const unidadOptions = useMemo(
-    () => getUnidadOptions(nivel, estructura),
-    [nivel, estructura]
-  )
-
-  function handleNivelChange(value: Nivel) {
-    setNivel(value)
-    setUnidadId("") // reset unit selection when level changes
-  }
-
   function toggleCurso(id: string) {
     setCursosSeleccionados((prev) => {
       const next = new Set(prev)
@@ -173,9 +191,40 @@ function MiembroForm({
     })
   }
 
+  // ── Error ────────────────────────────────────────────────────────────────────
+  const [error, setError] = useState<string | null>(null)
+
+  // ── Submit ───────────────────────────────────────────────────────────────────
+  function resetForm() {
+    setNombre("")
+    setRango("PVT")
+    setRol("Fusilero")
+    setDiscordId("")
+    setSteamId("")
+    setNotas("")
+    setCursosSeleccionados(new Set())
+    setNickExists(false)
+    setError(null)
+    // Keep cascade selection so admin can quickly add another to same unit
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
+
+    // Derive nivel + unidadId from cascade
+    let nivel = ""
+    let unidadId = ""
+    if (escuadraId) {
+      nivel = "escuadra"
+      unidadId = escuadraId
+    } else if (pelotonId) {
+      nivel = "peloton"
+      unidadId = pelotonId
+    } else if (companiaId) {
+      nivel = "compania"
+      unidadId = companiaId
+    }
 
     const fd = new FormData()
     fd.set("nombre_milsim", nombre)
@@ -185,9 +234,11 @@ function MiembroForm({
     fd.set("steam_id", steamId)
     fd.set("activo", String(activo))
     fd.set("notas_admin", notas)
-    fd.set("nivel", nivel === "none" ? "" : nivel)
-    fd.set("unidad_id", nivel !== "none" ? unidadId : "")
+    fd.set("nivel", nivel)
+    fd.set("unidad_id", unidadId)
     fd.set("cursos", Array.from(cursosSeleccionados).join(","))
+
+    const keepOpen = submitModeRef.current === "another"
 
     startTransition(async () => {
       const result = isEdit
@@ -198,7 +249,11 @@ function MiembroForm({
         setError(result.error)
       } else {
         toast.success(isEdit ? "Operador actualizado" : "Operador creado")
-        onClose()
+        if (keepOpen && !isEdit) {
+          resetForm()
+        } else {
+          onClose()
+        }
       }
     })
   }
@@ -208,25 +263,38 @@ function MiembroForm({
   const labelClass = "text-slate-300 text-sm font-medium"
   const sectionClass = "text-[10px] font-mono font-bold tracking-widest text-slate-500 uppercase"
 
+  const submitDisabled = pending || !nombre.trim() || !rango || nickExists
+
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-5">
       {/* ── Identidad ──────────────────────────────────────────────────────── */}
       <div className="space-y-4">
         <p className={sectionClass}>Identidad</p>
 
-        {/* Nombre milsim */}
+        {/* Nick milsim */}
         <div className="space-y-1.5">
           <Label htmlFor="nombre_milsim" className={labelClass}>
             Nick milsim <span className="text-red-400">*</span>
           </Label>
-          <Input
-            id="nombre_milsim"
-            value={nombre}
-            onChange={(e) => setNombre(e.target.value)}
-            placeholder="e.g. Ghost"
-            required
-            className={inputClass}
-          />
+          <div className="relative">
+            <Input
+              id="nombre_milsim"
+              value={nombre}
+              onChange={(e) => handleNombreChange(e.target.value)}
+              placeholder="e.g. Ghost"
+              required
+              className={inputClass}
+            />
+            {checkingNick && (
+              <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500 animate-spin" />
+            )}
+          </div>
+          {nickExists && (
+            <p className="text-xs text-yellow-400 flex items-center gap-1.5">
+              <AlertTriangle className="w-3 h-3 shrink-0" />
+              Este nick ya está registrado
+            </p>
+          )}
         </div>
 
         {/* Rango */}
@@ -240,10 +308,7 @@ function MiembroForm({
             </SelectTrigger>
             <SelectContent
               className="border max-h-72"
-              style={{
-                background: "#0f172a",
-                borderColor: "rgba(255,255,255,0.1)",
-              }}
+              style={{ background: "#0f172a", borderColor: "rgba(255,255,255,0.1)" }}
             >
               {CATEGORIAS.map(({ key, label }) => (
                 <SelectGroup key={key}>
@@ -251,14 +316,8 @@ function MiembroForm({
                     {label}
                   </SelectLabel>
                   {RANKS_BY_CATEGORY[key].map((r) => (
-                    <SelectItem
-                      key={r.code}
-                      value={r.code}
-                      className="text-slate-200"
-                    >
-                      <span className="font-mono text-xs text-slate-400 mr-1.5">
-                        {r.code}
-                      </span>
+                    <SelectItem key={r.code} value={r.code} className="text-slate-200">
+                      <span className="font-mono text-xs text-slate-400 mr-1.5">{r.code}</span>
                       {r.label}
                     </SelectItem>
                   ))}
@@ -268,7 +327,7 @@ function MiembroForm({
           </Select>
         </div>
 
-        {/* Rol con sugerencias */}
+        {/* Rol */}
         <div className="space-y-1.5">
           <Label htmlFor="rol" className={labelClass}>
             Rol / Especialidad
@@ -291,15 +350,12 @@ function MiembroForm({
 
       <Separator style={{ background: "rgba(255,255,255,0.06)" }} />
 
-      {/* ── Cuentas ────────────────────────────────────────────────────────── */}
+      {/* ── Cuentas externas ───────────────────────────────────────────────── */}
       <div className="space-y-4">
         <p className={sectionClass}>Cuentas externas</p>
-
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
-            <Label htmlFor="discord_id" className={labelClass}>
-              Discord ID
-            </Label>
+            <Label htmlFor="discord_id" className={labelClass}>Discord ID</Label>
             <Input
               id="discord_id"
               value={discordId}
@@ -309,9 +365,7 @@ function MiembroForm({
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="steam_id" className={labelClass}>
-              Steam ID
-            </Label>
+            <Label htmlFor="steam_id" className={labelClass}>Steam ID</Label>
             <Input
               id="steam_id"
               value={steamId}
@@ -325,71 +379,45 @@ function MiembroForm({
 
       <Separator style={{ background: "rgba(255,255,255,0.06)" }} />
 
-      {/* ── Asignación de unidad ────────────────────────────────────────────── */}
+      {/* ── Asignación (cascada) ────────────────────────────────────────────── */}
       <div className="space-y-4">
-        <p className={sectionClass}>Asignación</p>
+        <p className={sectionClass}>Asignación de unidad</p>
 
-        {/* Nivel */}
+        {/* Compañía */}
         <div className="space-y-1.5">
-          <Label className={labelClass}>Nivel de asignación</Label>
-          <Select
-            value={nivel}
-            onValueChange={(v) => handleNivelChange(v as Nivel)}
-          >
+          <Label className={labelClass}>Compañía</Label>
+          <Select value={companiaId || "__none__"} onValueChange={(v) => handleCompaniaChange(v === "__none__" ? "" : v)}>
             <SelectTrigger className={`${inputClass} focus:ring-0`}>
               <SelectValue placeholder="Sin asignar" />
             </SelectTrigger>
-            <SelectContent
-              className="border"
-              style={{
-                background: "#0f172a",
-                borderColor: "rgba(255,255,255,0.1)",
-              }}
-            >
-              <SelectItem value="none" className="text-slate-400">
+            <SelectContent className="border" style={{ background: "#0f172a", borderColor: "rgba(255,255,255,0.1)" }}>
+              <SelectItem value="__none__" className="text-slate-400">
                 Sin asignar
               </SelectItem>
-              <SelectItem value="regimiento" className="text-slate-200">
-                Regimiento
-              </SelectItem>
-              <SelectItem value="compania" className="text-slate-200">
-                Compañía
-              </SelectItem>
-              <SelectItem value="peloton" className="text-slate-200">
-                Pelotón
-              </SelectItem>
-              <SelectItem value="escuadra" className="text-slate-200">
-                Escuadra
-              </SelectItem>
+              {todasCompanias.map((c) => (
+                <SelectItem key={c.id} value={c.id} className="text-slate-200">
+                  {c.nombre}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
 
-        {/* Unidad específica */}
-        {nivel !== "none" && unidadOptions.length > 0 && (
+        {/* Pelotón (solo si hay compañía seleccionada) */}
+        {companiaId && pelotones.length > 0 && (
           <div className="space-y-1.5">
-            <Label className={labelClass}>Unidad</Label>
-            <Select
-              value={unidadId}
-              onValueChange={setUnidadId}
-            >
+            <Label className={labelClass}>Pelotón</Label>
+            <Select value={pelotonId || "__comp__"} onValueChange={(v) => handlePelotonChange(v === "__comp__" ? "" : v)}>
               <SelectTrigger className={`${inputClass} focus:ring-0`}>
-                <SelectValue placeholder="Seleccionar unidad…" />
+                <SelectValue />
               </SelectTrigger>
-              <SelectContent
-                className="border max-h-60"
-                style={{
-                  background: "#0f172a",
-                  borderColor: "rgba(255,255,255,0.1)",
-                }}
-              >
-                {unidadOptions.map((opt) => (
-                  <SelectItem
-                    key={opt.id}
-                    value={opt.id}
-                    className="text-slate-200 text-sm"
-                  >
-                    {opt.label}
+              <SelectContent className="border" style={{ background: "#0f172a", borderColor: "rgba(255,255,255,0.1)" }}>
+                <SelectItem value="__comp__" className="text-slate-400">
+                  Asignar a {compSeleccionada?.nombre} directamente
+                </SelectItem>
+                {pelotones.map((p) => (
+                  <SelectItem key={p.id} value={p.id} className="text-slate-200">
+                    {p.nombre}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -397,9 +425,48 @@ function MiembroForm({
           </div>
         )}
 
-        {nivel !== "none" && unidadOptions.length === 0 && (
+        {/* Escuadra (solo si hay pelotón seleccionado) */}
+        {pelotonId && escuadras.length > 0 && (
+          <div className="space-y-1.5">
+            <Label className={labelClass}>Escuadra</Label>
+            <Select value={escuadraId || "__plt__"} onValueChange={(v) => setEscuadraId(v === "__plt__" ? "" : v)}>
+              <SelectTrigger className={`${inputClass} focus:ring-0`}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="border" style={{ background: "#0f172a", borderColor: "rgba(255,255,255,0.1)" }}>
+                <SelectItem value="__plt__" className="text-slate-400">
+                  Asignar a {pelSeleccionado?.nombre} directamente
+                </SelectItem>
+                {escuadras.map((e) => {
+                  const ocupados = escuadraConteos[e.id] ?? 0
+                  const libre = e.max_miembros - ocupados
+                  const llena = libre <= 0
+                  return (
+                    <SelectItem key={e.id} value={e.id} className="text-slate-200">
+                      <span className="flex items-center gap-2">
+                        <span>{e.nombre}</span>
+                        <span className={`text-[11px] font-mono ${llena ? "text-red-400" : "text-slate-500"}`}>
+                          {ocupados}/{e.max_miembros}
+                          {llena ? " · llena" : libre === 1 ? " · 1 libre" : ` · ${libre} libres`}
+                        </span>
+                      </span>
+                    </SelectItem>
+                  )
+                })}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
+        {/* Warning: sin unidades */}
+        {companiaId && pelotones.length === 0 && (
           <p className="text-xs text-amber-400/80">
-            No hay unidades de ese nivel registradas aún.
+            Esta compañía no tiene pelotones registrados aún.
+          </p>
+        )}
+        {pelotonId && escuadras.length === 0 && (
+          <p className="text-xs text-amber-400/80">
+            Este pelotón no tiene escuadras registradas aún.
           </p>
         )}
       </div>
@@ -413,9 +480,7 @@ function MiembroForm({
             <p className={sectionClass}>
               Cursos completados{" "}
               {cursosSeleccionados.size > 0 && (
-                <span className="text-blue-400 normal-case">
-                  ({cursosSeleccionados.size})
-                </span>
+                <span className="text-blue-400 normal-case">({cursosSeleccionados.size})</span>
               )}
             </p>
             <div className="grid grid-cols-1 gap-2 max-h-40 overflow-y-auto pr-1">
@@ -430,25 +495,20 @@ function MiembroForm({
                     className="border-white/20 data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
                   />
                   <div className="min-w-0">
-                    <span className="font-mono text-xs text-blue-400 mr-2">
-                      {c.sigla}
-                    </span>
+                    <span className="font-mono text-xs text-blue-400 mr-2">{c.sigla}</span>
                     <span className="text-slate-300 text-sm">{c.nombre}</span>
                   </div>
                 </label>
               ))}
             </div>
           </div>
-
           <Separator style={{ background: "rgba(255,255,255,0.06)" }} />
         </>
       )}
 
       {/* ── Notas admin ────────────────────────────────────────────────────── */}
       <div className="space-y-1.5">
-        <Label htmlFor="notas_admin" className={labelClass}>
-          Notas de administración
-        </Label>
+        <Label htmlFor="notas_admin" className={labelClass}>Notas de administración</Label>
         <Textarea
           id="notas_admin"
           value={notas}
@@ -468,9 +528,7 @@ function MiembroForm({
         />
         <div>
           <span className="text-slate-200 text-sm font-medium">Operador activo</span>
-          <p className="text-slate-500 text-xs">
-            Los operadores inactivos no aparecen en el ORBAT público
-          </p>
+          <p className="text-slate-500 text-xs">Los operadores inactivos no aparecen en el ORBAT público</p>
         </div>
       </label>
 
@@ -481,20 +539,32 @@ function MiembroForm({
         </p>
       )}
 
-      {/* ── Submit ─────────────────────────────────────────────────────────── */}
-      <Button
-        type="submit"
-        disabled={pending || !nombre.trim() || !rango}
-        className="w-full bg-blue-600 hover:bg-blue-500 text-white disabled:opacity-50"
-      >
-        {pending
-          ? isEdit
-            ? "Guardando…"
-            : "Creando…"
-          : isEdit
-          ? "Guardar cambios"
-          : "Crear operador"}
-      </Button>
+      {/* ── Botones ────────────────────────────────────────────────────────── */}
+      <div className={`flex gap-2 ${!isEdit ? "flex-col sm:flex-row" : ""}`}>
+        {!isEdit && (
+          <Button
+            type="submit"
+            variant="outline"
+            onClick={() => { submitModeRef.current = "another" }}
+            disabled={submitDisabled}
+            className="flex-1 border-white/10 text-slate-300 hover:bg-white/5 hover:text-slate-100 disabled:opacity-40"
+          >
+            {pending && submitModeRef.current === "another" ? (
+              <><Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" />Creando…</>
+            ) : "Guardar y crear otro"}
+          </Button>
+        )}
+        <Button
+          type="submit"
+          onClick={() => { submitModeRef.current = "close" }}
+          disabled={submitDisabled}
+          className="flex-1 bg-blue-600 hover:bg-blue-500 text-white disabled:opacity-50"
+        >
+          {pending && submitModeRef.current === "close" ? (
+            <><Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" />{isEdit ? "Guardando…" : "Creando…"}</>
+          ) : isEdit ? "Guardar cambios" : "Crear operador"}
+        </Button>
+      </div>
     </form>
   )
 }
@@ -506,8 +576,8 @@ interface DialogProps {
   miembro?: MiembroRow
   estructura: EstructuraRegimiento[]
   cursos: CursoRow[]
-  /** Cursos ya completados por el miembro (IDs). Only needed in edit mode. */
   cursosCompletados?: string[]
+  escuadraConteos?: Record<string, number>
 }
 
 export function MiembroDialog({
@@ -516,6 +586,7 @@ export function MiembroDialog({
   estructura,
   cursos,
   cursosCompletados,
+  escuadraConteos,
 }: DialogProps) {
   const [open, setOpen] = useState(false)
 
@@ -531,6 +602,7 @@ export function MiembroDialog({
           <Button
             variant="ghost"
             size="icon"
+            title="Editar operador"
             className="w-7 h-7 text-slate-500 hover:text-blue-400 hover:bg-blue-500/10"
           >
             <Pencil className="w-3.5 h-3.5" />
@@ -541,10 +613,7 @@ export function MiembroDialog({
       <SheetContent
         side="right"
         className="w-full sm:max-w-md border-l overflow-y-auto"
-        style={{
-          background: "#111827",
-          borderColor: "rgba(255,255,255,0.08)",
-        }}
+        style={{ background: "#111827", borderColor: "rgba(255,255,255,0.08)" }}
       >
         <SheetHeader className="mb-6">
           <SheetTitle className="text-slate-100 text-lg font-bold">
@@ -557,6 +626,7 @@ export function MiembroDialog({
           cursosCompletados={cursosCompletados}
           estructura={estructura}
           cursos={cursos}
+          escuadraConteos={escuadraConteos}
           onClose={() => setOpen(false)}
         />
       </SheetContent>

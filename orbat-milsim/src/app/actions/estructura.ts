@@ -1,6 +1,6 @@
 "use server"
 
-import { revalidatePath } from "next/cache"
+import { revalidatePath, revalidateTag } from "next/cache"
 import { createClient } from "@/lib/supabase/server"
 
 export type ActionResult = { error: string } | { success: true }
@@ -16,6 +16,7 @@ export async function crearRegimiento(
 
   const { error } = await supabase.from("regimientos").insert({ nombre })
   if (error) return { error: error.message }
+  revalidateTag("estructura")
   revalidatePath("/estructura")
   return { success: true }
 }
@@ -33,6 +34,7 @@ export async function actualizarRegimiento(
     .update({ nombre })
     .eq("id", id)
   if (error) return { error: error.message }
+  revalidateTag("estructura")
   revalidatePath("/estructura")
   return { success: true }
 }
@@ -41,6 +43,7 @@ export async function eliminarRegimiento(id: string): Promise<ActionResult> {
   const supabase = await createClient()
   const { error } = await supabase.from("regimientos").delete().eq("id", id)
   if (error) return { error: error.message }
+  revalidateTag("estructura")
   revalidatePath("/estructura")
   return { success: true }
 }
@@ -69,6 +72,7 @@ export async function crearCompania(
     .from("companias")
     .insert({ nombre, regimiento_id, orden })
   if (error) return { error: error.message }
+  revalidateTag("estructura")
   revalidatePath("/estructura")
   return { success: true }
 }
@@ -86,6 +90,7 @@ export async function actualizarCompania(
     .update({ nombre })
     .eq("id", id)
   if (error) return { error: error.message }
+  revalidateTag("estructura")
   revalidatePath("/estructura")
   return { success: true }
 }
@@ -94,6 +99,7 @@ export async function eliminarCompania(id: string): Promise<ActionResult> {
   const supabase = await createClient()
   const { error } = await supabase.from("companias").delete().eq("id", id)
   if (error) return { error: error.message }
+  revalidateTag("estructura")
   revalidatePath("/estructura")
   return { success: true }
 }
@@ -130,6 +136,7 @@ export async function reordenarCompania(
     .update({ orden: current.orden })
     .eq("id", sibling.id)
 
+  revalidateTag("estructura")
   revalidatePath("/estructura")
   return { success: true }
 }
@@ -156,6 +163,7 @@ export async function crearPeloton(formData: FormData): Promise<ActionResult> {
     .from("pelotones")
     .insert({ nombre, compania_id, orden })
   if (error) return { error: error.message }
+  revalidateTag("estructura")
   revalidatePath("/estructura")
   return { success: true }
 }
@@ -173,6 +181,7 @@ export async function actualizarPeloton(
     .update({ nombre })
     .eq("id", id)
   if (error) return { error: error.message }
+  revalidateTag("estructura")
   revalidatePath("/estructura")
   return { success: true }
 }
@@ -181,6 +190,7 @@ export async function eliminarPeloton(id: string): Promise<ActionResult> {
   const supabase = await createClient()
   const { error } = await supabase.from("pelotones").delete().eq("id", id)
   if (error) return { error: error.message }
+  revalidateTag("estructura")
   revalidatePath("/estructura")
   return { success: true }
 }
@@ -217,6 +227,7 @@ export async function reordenarPeloton(
     .update({ orden: current.orden })
     .eq("id", sibling.id)
 
+  revalidateTag("estructura")
   revalidatePath("/estructura")
   return { success: true }
 }
@@ -245,6 +256,7 @@ export async function crearEscuadra(formData: FormData): Promise<ActionResult> {
     .from("escuadras")
     .insert({ nombre, peloton_id, indicativo_radio, orden })
   if (error) return { error: error.message }
+  revalidateTag("estructura")
   revalidatePath("/estructura")
   return { success: true }
 }
@@ -264,6 +276,7 @@ export async function actualizarEscuadra(
     .update({ nombre, indicativo_radio })
     .eq("id", id)
   if (error) return { error: error.message }
+  revalidateTag("estructura")
   revalidatePath("/estructura")
   return { success: true }
 }
@@ -278,6 +291,7 @@ export async function actualizarIndicativoEscuadra(
     .update({ indicativo_radio: indicativo_radio || null })
     .eq("id", id)
   if (error) return { error: error.message }
+  revalidateTag("estructura")
   revalidatePath("/estructura")
   return { success: true }
 }
@@ -286,6 +300,7 @@ export async function eliminarEscuadra(id: string): Promise<ActionResult> {
   const supabase = await createClient()
   const { error } = await supabase.from("escuadras").delete().eq("id", id)
   if (error) return { error: error.message }
+  revalidateTag("estructura")
   revalidatePath("/estructura")
   return { success: true }
 }
@@ -322,6 +337,7 @@ export async function reordenarEscuadra(
     .update({ orden: current.orden })
     .eq("id", sibling.id)
 
+  revalidateTag("estructura")
   revalidatePath("/estructura")
   return { success: true }
 }

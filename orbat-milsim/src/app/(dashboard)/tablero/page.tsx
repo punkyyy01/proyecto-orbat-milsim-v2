@@ -1,5 +1,5 @@
 import { getOrbatCompleto } from "@/lib/supabase/queries"
-import { TablerKanban, type KanbanGrupo } from "@/components/tablero/tablero-kanban"
+import { TablerKanban, TablerKanbanEmpty, type KanbanGrupo } from "@/components/tablero/tablero-kanban"
 
 export default async function TablerPage() {
   let orbat: Awaited<ReturnType<typeof getOrbatCompleto>> = []
@@ -54,9 +54,7 @@ export default async function TablerPage() {
           </p>
         </div>
       ) : grupos.length === 0 ? (
-        <p className="text-sm text-slate-500">
-          No hay escuadras con personal asignado.
-        </p>
+        <TablerKanbanEmpty />
       ) : (
         <TablerKanban grupos={grupos} />
       )}

@@ -549,31 +549,58 @@ export default async function OrbatPublicaPage() {
       {/* ── Contenido ──────────────────────────────────────────────────────── */}
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
         {regimientos.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-32 gap-3">
-            <span
-              className="font-mono text-4xl"
-              style={{ color: C.textDim }}
+          <div
+            className="flex flex-col items-center justify-center py-32 gap-5"
+            style={{ animation: "orbat-fadein 0.6s ease both" }}
+          >
+            <div
+              className="w-16 h-16 rounded-2xl border-2 flex items-center justify-center"
+              style={{ borderColor: C.border, background: C.regHd }}
             >
-              ◈
-            </span>
-            <p
-              className="font-mono text-sm tracking-widest"
-              style={{ color: C.textDim }}
+              <span className="font-mono text-2xl" style={{ color: C.green }}>◈</span>
+            </div>
+            <div className="text-center space-y-2">
+              <p
+                className="font-mono text-sm font-bold tracking-widest uppercase"
+                style={{ color: C.textMuted }}
+              >
+                ORBAT sin datos
+              </p>
+              <p className="text-sm max-w-sm" style={{ color: C.textDim }}>
+                No hay unidades registradas aún. Si eres administrador, accede al panel para configurar la estructura.
+              </p>
+            </div>
+            <Link
+              href="/dashboard"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-medium transition-all hover:opacity-100"
+              style={{
+                borderColor: C.border,
+                color: C.green,
+                background: "rgba(74,222,128,0.05)",
+                opacity: 0.8,
+              }}
             >
-              — SIN DATOS DE ORBAT —
-            </p>
-            <p className="text-xs" style={{ color: C.textDim }}>
-              No hay unidades registradas o la base de datos no está configurada.
-            </p>
+              Acceder al Panel de Administración →
+            </Link>
           </div>
         ) : (
-          <div className="space-y-10 sm:space-y-14">
+          <div
+            className="space-y-10 sm:space-y-14"
+            style={{ animation: "orbat-fadein 0.5s ease both" }}
+          >
             {regimientos.map((reg) => (
               <RegimientoSection key={reg.id} reg={reg} />
             ))}
           </div>
         )}
       </main>
+
+      <style>{`
+        @keyframes orbat-fadein {
+          from { opacity: 0; transform: translateY(12px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
 
       {/* ── Footer ─────────────────────────────────────────────────────────── */}
       <footer
@@ -597,8 +624,13 @@ export default async function OrbatPublicaPage() {
           </div>
           <Link
             href="/dashboard"
-            className="font-mono text-[11px] tracking-wider transition-all duration-200 hover:opacity-100"
-            style={{ color: C.greenDim, opacity: 0.7 }}
+            className="font-mono text-xs tracking-wide transition-all duration-200 px-3 py-1.5 rounded border hover:opacity-100"
+            style={{
+              color: C.green,
+              borderColor: C.greenDim,
+              background: "rgba(74,222,128,0.04)",
+              opacity: 0.75,
+            }}
           >
             Panel de Administración →
           </Link>

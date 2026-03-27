@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { ChevronRight, LogOut } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
@@ -17,6 +18,7 @@ import {
 const BREADCRUMB_LABELS: Record<string, string> = {
   personal:   "Personal",
   estructura: "Estructura",
+  tablero:    "Tablero",
   cursos:     "Cursos",
   auditoria:  "Auditoría",
 }
@@ -52,22 +54,23 @@ export function DashboardHeader({ userInfo }: { userInfo: UserInfo }) {
     >
       {/* Breadcrumbs */}
       <nav className="flex items-center gap-1.5 text-sm pl-10 lg:pl-0">
-        <span className="font-mono text-xs text-slate-600">◈</span>
-        <ChevronRight className="w-3.5 h-3.5 text-slate-700" />
+        <Link href="/" className="font-mono text-xs text-slate-500 hover:text-slate-300 transition-colors">
+          ◈
+        </Link>
+        {segments.length > 0 && <ChevronRight className="w-3.5 h-3.5 text-slate-700" />}
         {segments.map((seg, i) => {
           const label = BREADCRUMB_LABELS[seg] ?? seg
           const isLast = i === segments.length - 1
+          const href = "/" + segments.slice(0, i + 1).join("/")
           return (
             <span key={seg} className="flex items-center gap-1.5">
-              <span
-                className={
-                  isLast
-                    ? "text-slate-200 font-medium"
-                    : "text-slate-500"
-                }
-              >
-                {label}
-              </span>
+              {isLast ? (
+                <span className="text-slate-200 font-medium">{label}</span>
+              ) : (
+                <Link href={href} className="text-slate-500 hover:text-slate-300 transition-colors">
+                  {label}
+                </Link>
+              )}
               {!isLast && (
                 <ChevronRight className="w-3.5 h-3.5 text-slate-700" />
               )}

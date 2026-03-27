@@ -1,9 +1,18 @@
 "use client"
 
 import { useRouter, useSearchParams, usePathname } from "next/navigation"
-import { useTransition, useState } from "react"
+import { useTransition, useState, useMemo } from "react"
 import { toast } from "sonner"
-import { ChevronLeft, ChevronRight, Pencil, Trash2 } from "lucide-react"
+import {
+  ChevronLeft,
+  ChevronRight,
+  Pencil,
+  Trash2,
+  ChevronsUpDown,
+  ChevronUp,
+  ChevronDown,
+  UserX,
+} from "lucide-react"
 import {
   Table,
   TableBody,
@@ -34,8 +43,9 @@ import { MiembroDialog } from "@/components/personal/miembro-dialog"
 import type { MiembroRow, CursoRow, RangoMilitar } from "@/lib/types/database"
 import type { EstructuraRegimiento } from "@/lib/supabase/queries"
 
-// ─── Rank styling ─────────────────────────────────────────────────────────────
+// ─── Rank ordering & styling ──────────────────────────────────────────────────
 
+const RANK_ORDER = new Map(RANKS.map((r, i) => [r.code, i]))
 const RANK_CAT_MAP = new Map(RANKS.map((r) => [r.code, r.category]))
 
 const CAT_CLASSES: Record<string, string> = {
@@ -80,9 +90,21 @@ function getUnidadLabel(
   return "—"
 }
 
+// ─── Sort icon ────────────────────────────────────────────────────────────────
+
+type SortCol = "rango" | "nick" | "unidad"
+type SortDir = "asc" | "desc"
+
+function SortIcon({ col, sortCol, sortDir }: { col: SortCol; sortCol: SortCol | null; sortDir: SortDir }) {
+  if (sortCol !== col) return <ChevronsUpDown className="w-3 h-3 text-slate-600 ml-1 inline" />
+  return sortDir === "asc"
+    ? <ChevronUp className="w-3 h-3 text-blue-400 ml-1 inline" />
+    : <ChevronDown className="w-3 h-3 text-blue-400 ml-1 inline" />
+}
+
 // ─── Inline Active Toggle ─────────────────────────────────────────────────────
 
-function ActiveToggle({ id, activo }: { id: string; activo: boolean }) {
+function ActiveToggle({ id, activo, nombre }: { id: string; activo: boolean; nombre: string }) {
   const [pending, startTransition] = useTransition()
   const [optimistic, setOptimistic] = useState(activo)
 
@@ -94,6 +116,8 @@ function ActiveToggle({ id, activo }: { id: string; activo: boolean }) {
       if ("error" in result) {
         setOptimistic(!next)
         toast.error(result.error)
+      } else {
+        toast.success(next ? `${nombre} activado` : `${nombre} desactivado`)
       }
     })
   }
@@ -140,6 +164,7 @@ function RankSelectInline({ id, rango }: { id: string; rango: string }) {
         startTransition(async () => {
           const result = await cambiarRangoMiembro(id, value as RangoMilitar)
           if ("error" in result) toast.error(result.error)
+          else toast.success(`Rango actualizado a ${value}`)
         })
       }}
       disabled={pending}
@@ -202,6 +227,7 @@ function DeleteButton({ id, nombre }: { id: string; nombre: string }) {
         variant="ghost"
         size="icon"
         onClick={() => setOpen(true)}
+        title="Eliminar operador"
         className="w-7 h-7 text-slate-500 hover:text-red-400 hover:bg-red-500/10"
       >
         <Trash2 className="w-3.5 h-3.5" />
@@ -210,16 +236,11 @@ function DeleteButton({ id, nombre }: { id: string; nombre: string }) {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent
           className="max-w-sm border"
-          style={{
-            background: "#0f172a",
-            borderColor: "rgba(255,255,255,0.1)",
-          }}
+          style={{ background: "#0f172a", borderColor: "rgba(255,255,255,0.1)" }}
         >
           <div className="space-y-4">
             <div>
-              <h3 className="text-base font-semibold text-slate-100">
-                ¿Eliminar operador?
-              </h3>
+              <h3 className="text-base font-semibold text-slate-100">¿Eliminar operador?</h3>
               <p className="text-sm text-slate-400 mt-1.5">
                 Esto eliminará permanentemente a{" "}
                 <span className="text-slate-200 font-medium">{nombre}</span>{" "}
@@ -258,6 +279,7 @@ interface Props {
   currentPage: number
   estructura: EstructuraRegimiento[]
   cursos: CursoRow[]
+  escuadraConteos?: Record<string, number>
 }
 
 export function MiembrosTable({
@@ -266,10 +288,40 @@ export function MiembrosTable({
   currentPage,
   estructura,
   cursos,
+  escuadraConteos,
 }: Props) {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
+
+  const [sortCol, setSortCol] = useState<SortCol | null>(null)
+  const [sortDir, setSortDir] = useState<SortDir>("asc")
+
+  function handleSort(col: SortCol) {
+    if (sortCol === col) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"))
+    } else {
+      setSortCol(col)
+      setSortDir("asc")
+    }
+  }
+
+  const sorted = useMemo(() => {
+    if (!sortCol) return miembros
+    return [...miembros].sort((a, b) => {
+      let cmp = 0
+      if (sortCol === "rango") {
+        cmp = (RANK_ORDER.get(a.rango) ?? 999) - (RANK_ORDER.get(b.rango) ?? 999)
+      } else if (sortCol === "nick") {
+        cmp = a.nombre_milsim.localeCompare(b.nombre_milsim)
+      } else if (sortCol === "unidad") {
+        const la = getUnidadLabel(a, estructura)
+        const lb = getUnidadLabel(b, estructura)
+        cmp = la.localeCompare(lb)
+      }
+      return sortDir === "asc" ? cmp : -cmp
+    })
+  }, [miembros, sortCol, sortDir, estructura])
 
   function goToPage(page: number) {
     const params = new URLSearchParams(searchParams.toString())
@@ -280,18 +332,21 @@ export function MiembrosTable({
   if (miembros.length === 0) {
     return (
       <div
-        className="rounded-xl border py-20 text-center"
-        style={{
-          background: "#0f172a",
-          borderColor: "rgba(255,255,255,0.06)",
-        }}
+        className="rounded-xl border py-20 text-center space-y-3"
+        style={{ background: "#0f172a", borderColor: "rgba(255,255,255,0.06)" }}
       >
-        <p className="text-slate-500 text-sm">
-          No hay operadores que coincidan con los filtros.
-        </p>
+        <UserX className="w-8 h-8 text-slate-600 mx-auto" />
+        <div>
+          <p className="text-slate-400 text-sm font-medium">No hay operadores registrados</p>
+          <p className="text-slate-600 text-xs mt-1">
+            Agrega el primero usando el botón "Agregar operador" →
+          </p>
+        </div>
       </div>
     )
   }
+
+  const thClass = "text-slate-400 text-xs font-medium cursor-pointer select-none hover:text-slate-200 transition-colors"
 
   return (
     <div className="space-y-3">
@@ -303,22 +358,22 @@ export function MiembrosTable({
           <TableHeader>
             <TableRow
               className="border-b hover:bg-transparent"
-              style={{
-                background: "rgba(15,23,42,0.8)",
-                borderColor: "rgba(255,255,255,0.06)",
-              }}
+              style={{ background: "rgba(15,23,42,0.8)", borderColor: "rgba(255,255,255,0.06)" }}
             >
-              <TableHead className="text-slate-400 text-xs font-medium w-32">
-                Rango
+              <TableHead className={`${thClass} w-32`} onClick={() => handleSort("rango")}>
+                Rango <SortIcon col="rango" sortCol={sortCol} sortDir={sortDir} />
               </TableHead>
-              <TableHead className="text-slate-400 text-xs font-medium">
-                Nick
+              <TableHead className={thClass} onClick={() => handleSort("nick")}>
+                Nick <SortIcon col="nick" sortCol={sortCol} sortDir={sortDir} />
               </TableHead>
               <TableHead className="text-slate-400 text-xs font-medium hidden md:table-cell">
                 Rol
               </TableHead>
-              <TableHead className="text-slate-400 text-xs font-medium hidden lg:table-cell">
-                Unidad
+              <TableHead
+                className={`${thClass} hidden lg:table-cell`}
+                onClick={() => handleSort("unidad")}
+              >
+                Unidad <SortIcon col="unidad" sortCol={sortCol} sortDir={sortDir} />
               </TableHead>
               <TableHead className="text-slate-400 text-xs font-medium w-20 text-center">
                 Estado
@@ -329,10 +384,10 @@ export function MiembrosTable({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {miembros.map((m) => (
+            {sorted.map((m) => (
               <TableRow
                 key={m.id}
-                className="border-b hover:bg-white/[0.02] group"
+                className="border-b transition-colors hover:bg-white/[0.035] group"
                 style={{ borderColor: "rgba(255,255,255,0.04)" }}
               >
                 {/* Rango (inline select) */}
@@ -349,9 +404,7 @@ export function MiembrosTable({
 
                 {/* Rol */}
                 <TableCell className="py-2.5 hidden md:table-cell">
-                  <span className="text-slate-400 text-sm">
-                    {m.rol || "—"}
-                  </span>
+                  <span className="text-slate-400 text-sm">{m.rol || "—"}</span>
                 </TableCell>
 
                 {/* Unidad */}
@@ -363,7 +416,7 @@ export function MiembrosTable({
 
                 {/* Estado (toggle) */}
                 <TableCell className="py-2.5 text-center">
-                  <ActiveToggle id={m.id} activo={m.activo} />
+                  <ActiveToggle id={m.id} activo={m.activo} nombre={m.nombre_milsim} />
                 </TableCell>
 
                 {/* Acciones */}
@@ -374,6 +427,7 @@ export function MiembrosTable({
                       miembro={m}
                       estructura={estructura}
                       cursos={cursos}
+                      escuadraConteos={escuadraConteos}
                     />
                     <DeleteButton id={m.id} nombre={m.nombre_milsim} />
                   </div>

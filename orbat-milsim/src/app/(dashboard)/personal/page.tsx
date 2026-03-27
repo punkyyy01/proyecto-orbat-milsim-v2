@@ -39,11 +39,26 @@ export default async function PersonalPage({
     pageSize: 25,
   }
 
-  const [membrosPage, estructura, cursos] = await Promise.all([
+  const supabase = await createClient()
+
+  const [membrosPage, estructura, cursos, { data: ocupacionRaw }] = await Promise.all([
     getMiembros(filtros),
     getEstructura(),
     getCursos(),
+    // Conteo de miembros activos por escuadra para mostrar slots disponibles
+    supabase
+      .from("miembros")
+      .select("escuadra_id")
+      .not("escuadra_id", "is", null)
+      .eq("activo", true),
   ])
+
+  // Construir mapa escuadra_id → conteo
+  const escuadraConteos: Record<string, number> = {}
+  for (const row of ocupacionRaw ?? []) {
+    const id = row.escuadra_id as string
+    escuadraConteos[id] = (escuadraConteos[id] ?? 0) + 1
+  }
 
   return (
     <div className="space-y-5">
@@ -60,6 +75,7 @@ export default async function PersonalPage({
           mode="create"
           estructura={estructura}
           cursos={cursos}
+          escuadraConteos={escuadraConteos}
         />
       </div>
 
@@ -73,6 +89,7 @@ export default async function PersonalPage({
         currentPage={membrosPage.page}
         estructura={estructura}
         cursos={cursos}
+        escuadraConteos={escuadraConteos}
       />
     </div>
   )

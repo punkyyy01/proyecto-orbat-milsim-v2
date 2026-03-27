@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useState } from "react"
-import { Users, GitBranch, BookOpen, ClipboardList, Menu, Shield, LayoutGrid } from "lucide-react"
+import { Users, GitBranch, BookOpen, ClipboardList, Menu, Shield, LayoutGrid, LayoutDashboard } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import {
@@ -13,11 +13,12 @@ import {
 } from "@/components/ui/sheet"
 
 const BASE_NAV_ITEMS = [
-  { href: "/personal",   label: "Personal",   icon: Users,         adminOnly: false },
-  { href: "/estructura", label: "Estructura", icon: GitBranch,     adminOnly: false },
-  { href: "/tablero",    label: "Tablero",    icon: LayoutGrid,    adminOnly: false },
-  { href: "/cursos",     label: "Cursos",     icon: BookOpen,      adminOnly: false },
-  { href: "/auditoria",  label: "Auditoría",  icon: ClipboardList, adminOnly: true  },
+  { href: "/",           label: "Panel de Control", icon: LayoutDashboard, adminOnly: false, exact: true },
+  { href: "/personal",   label: "Personal",         icon: Users,           adminOnly: false, exact: false },
+  { href: "/estructura", label: "Estructura",       icon: GitBranch,       adminOnly: false, exact: false },
+  { href: "/tablero",    label: "Tablero",          icon: LayoutGrid,      adminOnly: false, exact: false },
+  { href: "/cursos",     label: "Cursos",           icon: BookOpen,        adminOnly: false, exact: false },
+  { href: "/auditoria",  label: "Auditoría",        icon: ClipboardList,   adminOnly: true,  exact: false },
 ] as const
 
 function NavContent({
@@ -57,9 +58,10 @@ function NavContent({
 
       {/* Navigation */}
       <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
-        {navItems.map(({ href, label, icon: Icon }) => {
-          const active =
-            pathname === href || pathname.startsWith(href + "/")
+        {navItems.map(({ href, label, icon: Icon, exact }) => {
+          const active = exact
+            ? pathname === href
+            : pathname === href || pathname.startsWith(href + "/")
           return (
             <Link
               key={href}
