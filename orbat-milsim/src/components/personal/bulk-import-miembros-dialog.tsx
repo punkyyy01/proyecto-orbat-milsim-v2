@@ -172,6 +172,7 @@ export function BulkImportMiembrosDialog({ open, onOpenChange, estructura }: Pro
             </p>
             <p className="text-slate-600 mt-1">Ej: Ghost, SGT, Fusilero, HYDRA 1-1</p>
             <p className="text-slate-600">Rangos: GEN LTG MG BG COL LTC MAJ CPT 1LT 2LT CW5–WO1 CSM SGM MSG 1SG SFC SSG SGT CPL SPC PFC PV2 PVT</p>
+            <p className="text-slate-600">Escuadra: nombre exacto (ej: &quot;HYDRA 1-1&quot;, no &quot;HYDRA&quot;)</p>
           </div>
 
           <Textarea

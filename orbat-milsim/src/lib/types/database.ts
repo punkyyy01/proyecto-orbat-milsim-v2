@@ -11,6 +11,10 @@ export type Json =
 // ─── Enums de la DB ──────────────────────────────────────────────────────────
 
 export type RangoMilitar =
+  | "GEN"
+  | "LTG"
+  | "MG"
+  | "BG"
   | "COL"
   | "LTC"
   | "MAJ"
@@ -33,7 +37,8 @@ export type RangoMilitar =
   | "SPC"
   | "PFC"
   | "PV2"
-  | "PV1";
+  | "PV1"
+  | "PVT";
 
 export type AppRole = "admin" | "officer" | "viewer";
 
