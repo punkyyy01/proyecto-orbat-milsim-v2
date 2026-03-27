@@ -83,14 +83,14 @@ export function BulkImportCursosDialog({ open, onOpenChange }: Props) {
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent
-        className="sm:max-w-2xl border"
+        className="sm:max-w-2xl border flex flex-col max-h-[90vh]"
         style={{ background: "#111827", borderColor: "rgba(255,255,255,0.1)" }}
       >
         <DialogHeader>
           <DialogTitle className="text-slate-100">Importar cursos en masa</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className="space-y-4 overflow-y-auto flex-1 pr-1">
           {/* Format hint */}
           <div
             className="rounded-lg px-3 py-2.5 text-xs text-slate-400 font-mono space-y-0.5"
@@ -115,7 +115,7 @@ export function BulkImportCursosDialog({ open, onOpenChange }: Props) {
                 Vista previa — {validas.length} válido{validas.length !== 1 ? "s" : ""} / {filas.length} total
               </p>
               <div
-                className="rounded-lg overflow-hidden divide-y text-sm"
+                className="rounded-lg overflow-y-auto divide-y text-sm max-h-64"
                 style={{ border: "1px solid rgba(255,255,255,0.08)" }}
               >
                 {filas.map((fila, i) => (
