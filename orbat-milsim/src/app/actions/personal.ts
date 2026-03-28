@@ -254,16 +254,18 @@ export async function agregarAsignacion(
 
   if (!nivel || !unidad_id) return { error: "Nivel y unidad son requeridos" }
 
-  const asignacion: Record<string, unknown> = {
+  const asignacion = {
     miembro_id,
     es_principal: false,
     orden: 0,
+    regimiento_id: nivel === "regimiento" ? unidad_id : null,
+    compania_id: nivel === "compania" ? unidad_id : null,
+    peloton_id: nivel === "peloton" ? unidad_id : null,
+    escuadra_id: nivel === "escuadra" ? unidad_id : null,
   }
-  if (nivel === "regimiento") asignacion.regimiento_id = unidad_id
-  else if (nivel === "compania") asignacion.compania_id = unidad_id
-  else if (nivel === "peloton") asignacion.peloton_id = unidad_id
-  else if (nivel === "escuadra") asignacion.escuadra_id = unidad_id
-  else return { error: "Nivel inválido" }
+
+  if (!["regimiento", "compania", "peloton", "escuadra"].includes(nivel))
+    return { error: "Nivel inválido" }
 
   const { error } = await supabase.from("asignaciones").insert(asignacion)
   if (error) return { error: error.message }
