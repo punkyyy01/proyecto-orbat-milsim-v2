@@ -2,15 +2,21 @@
 
 import { revalidatePath } from "next/cache"
 import { createClient } from "@/lib/supabase/server"
-import type { AsignacionRow, RangoMilitar } from "@/lib/types/database"
+import type { RangoMilitar } from "@/lib/types/database"
 
 export type ActionResult = { error: string } | { success: true }
 
-export type AsignacionConNombres = AsignacionRow & {
-  regimientos: { nombre: string } | null;
-  companias: { nombre: string } | null;
-  pelotones: { nombre: string } | null;
-  escuadras: { nombre: string } | null;
+export type AsignacionConNombres = {
+  id: string // synthetic: miembro_id
+  es_principal: boolean
+  escuadra_id: string | null
+  peloton_id: string | null
+  compania_id: string | null
+  regimiento_id: string | null
+  regimientos: { nombre: string } | null
+  companias: { nombre: string } | null
+  pelotones: { nombre: string } | null
+  escuadras: { nombre: string } | null
 }
 
 // ─── Crear miembro ────────────────────────────────────────────────────────────
@@ -24,6 +30,20 @@ export async function crearMiembro(formData: FormData): Promise<ActionResult> {
   if (!nombre_milsim) return { error: "El nombre milsim es requerido" }
   if (!rango) return { error: "El rango es requerido" }
 
+  const nivel = formData.get("nivel") as string | null
+  const unidad_id = (formData.get("unidad_id") as string) || null
+
+  const unitFields: Record<string, string | null> = {
+    escuadra_id: null,
+    peloton_id: null,
+    compania_id: null,
+    regimiento_id: null,
+  }
+  if (nivel === "escuadra" && unidad_id) unitFields.escuadra_id = unidad_id
+  else if (nivel === "peloton" && unidad_id) unitFields.peloton_id = unidad_id
+  else if (nivel === "compania" && unidad_id) unitFields.compania_id = unidad_id
+  else if (nivel === "regimiento" && unidad_id) unitFields.regimiento_id = unidad_id
+
   const { data: miembro, error } = await supabase
     .from("miembros")
     .insert({
@@ -34,31 +54,12 @@ export async function crearMiembro(formData: FormData): Promise<ActionResult> {
       steam_id: (formData.get("steam_id") as string) || null,
       activo: formData.get("activo") === "true",
       notas_admin: (formData.get("notas_admin") as string) || null,
+      ...unitFields,
     })
     .select("id")
     .single()
 
   if (error) return { error: error.message }
-
-  // Insertar asignación principal si se eligió una unidad
-  const nivel = formData.get("nivel") as string | null
-  const unidad_id = (formData.get("unidad_id") as string) || null
-
-  if (nivel && unidad_id && miembro) {
-    const asignacion: Record<string, unknown> = {
-      miembro_id: miembro.id,
-      es_principal: true,
-      orden: 0,
-    }
-    if (nivel === "regimiento") asignacion.regimiento_id = unidad_id
-    else if (nivel === "compania") asignacion.compania_id = unidad_id
-    else if (nivel === "peloton") asignacion.peloton_id = unidad_id
-    else if (nivel === "escuadra") asignacion.escuadra_id = unidad_id
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error: aError } = await supabase.from("asignaciones").insert(asignacion as any)
-    if (aError) return { error: aError.message }
-  }
 
   const cursosRaw = (formData.get("cursos") as string) || ""
   const cursoIds = cursosRaw.split(",").filter(Boolean)
@@ -86,21 +87,12 @@ export async function importarMiembrosBulk(
 
   const { data, error } = await supabase
     .from("miembros")
-    .insert(filas.map(({ nombre_milsim, rango, rol }) => ({ nombre_milsim, rango, rol, activo: true })))
+    .insert(filas.map(({ nombre_milsim, rango, rol, escuadra_id }) => ({
+      nombre_milsim, rango, rol, activo: true, escuadra_id: escuadra_id ?? null,
+    })))
     .select("id")
 
   if (error) return { insertados: 0, error: error.message }
-
-  // Crear asignación principal para los que tienen escuadra_id
-  const asignaciones = (data ?? [])
-    .map((m, i) => ({ miembro_id: m.id, escuadra_id: filas[i].escuadra_id }))
-    .filter((a) => a.escuadra_id !== null)
-    .map((a) => ({ miembro_id: a.miembro_id, escuadra_id: a.escuadra_id!, es_principal: true, orden: 0 }))
-
-  if (asignaciones.length > 0) {
-    const { error: aError } = await supabase.from("asignaciones").insert(asignaciones)
-    if (aError) return { insertados: data?.length ?? 0, error: aError.message }
-  }
 
   revalidatePath("/personal")
   return { insertados: data?.length ?? 0 }
@@ -233,14 +225,27 @@ export async function getAsignacionesMiembro(
   miembro_id: string
 ): Promise<AsignacionConNombres[]> {
   const supabase = await createClient()
-  const { data, error } = await supabase
-    .from("asignaciones")
-    .select("*, regimientos(nombre), companias(nombre), pelotones(nombre), escuadras(nombre)")
-    .eq("miembro_id", miembro_id)
-    .order("es_principal", { ascending: false })
-    .order("orden")
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabase as any)
+    .from("miembros")
+    .select("id, escuadra_id, peloton_id, compania_id, regimiento_id, escuadras(nombre), pelotones(nombre), companias(nombre), regimientos(nombre)")
+    .eq("id", miembro_id)
+    .single()
   if (error) throw new Error(`getAsignacionesMiembro: ${error.message}`)
-  return (data ?? []) as AsignacionConNombres[]
+  if (!data) return []
+  if (!data.escuadra_id && !data.peloton_id && !data.compania_id && !data.regimiento_id) return []
+  return [{
+    id: data.id,
+    es_principal: true,
+    escuadra_id: data.escuadra_id ?? null,
+    peloton_id: data.peloton_id ?? null,
+    compania_id: data.compania_id ?? null,
+    regimiento_id: data.regimiento_id ?? null,
+    escuadras: data.escuadras ?? null,
+    pelotones: data.pelotones ?? null,
+    companias: data.companias ?? null,
+    regimientos: data.regimientos ?? null,
+  }]
 }
 
 export async function agregarAsignacion(
@@ -253,56 +258,39 @@ export async function agregarAsignacion(
   const unidad_id = (formData.get("unidad_id") as string) || null
 
   if (!nivel || !unidad_id) return { error: "Nivel y unidad son requeridos" }
-
-  const asignacion = {
-    miembro_id,
-    es_principal: false,
-    orden: 0,
-    regimiento_id: nivel === "regimiento" ? unidad_id : null,
-    compania_id: nivel === "compania" ? unidad_id : null,
-    peloton_id: nivel === "peloton" ? unidad_id : null,
-    escuadra_id: nivel === "escuadra" ? unidad_id : null,
-  }
-
   if (!["regimiento", "compania", "peloton", "escuadra"].includes(nivel))
     return { error: "Nivel inválido" }
 
-  const { error } = await supabase.from("asignaciones").insert(asignacion)
+  const update = {
+    escuadra_id: nivel === "escuadra" ? unidad_id : null,
+    peloton_id: nivel === "peloton" ? unidad_id : null,
+    compania_id: nivel === "compania" ? unidad_id : null,
+    regimiento_id: nivel === "regimiento" ? unidad_id : null,
+  }
+
+  const { error } = await supabase.from("miembros").update(update).eq("id", miembro_id)
   if (error) return { error: error.message }
   revalidatePath("/personal")
   return { success: true }
 }
 
 export async function eliminarAsignacion(
-  asignacion_id: string
+  miembro_id: string
 ): Promise<ActionResult> {
   const supabase = await createClient()
-  const { error } = await supabase.from("asignaciones").delete().eq("id", asignacion_id)
+  const { error } = await supabase
+    .from("miembros")
+    .update({ escuadra_id: null, peloton_id: null, compania_id: null, regimiento_id: null })
+    .eq("id", miembro_id)
   if (error) return { error: error.message }
   revalidatePath("/personal")
   return { success: true }
 }
 
 export async function marcarAsignacionPrincipal(
-  asignacion_id: string,
-  miembro_id: string
+  _asignacion_id: string,
+  _miembro_id: string
 ): Promise<ActionResult> {
-  const supabase = await createClient()
-
-  // Quitar principal de todas las asignaciones del miembro
-  const { error: e1 } = await supabase
-    .from("asignaciones")
-    .update({ es_principal: false })
-    .eq("miembro_id", miembro_id)
-  if (e1) return { error: e1.message }
-
-  // Marcar la nueva principal
-  const { error: e2 } = await supabase
-    .from("asignaciones")
-    .update({ es_principal: true })
-    .eq("id", asignacion_id)
-  if (e2) return { error: e2.message }
-
-  revalidatePath("/personal")
+  // Only one assignment per member; always principal
   return { success: true }
 }

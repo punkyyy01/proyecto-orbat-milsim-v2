@@ -46,14 +46,14 @@ export default async function DashboardHomePage() {
   ] = await Promise.all([
     // Total operadores activos
     supabase.from("miembros").select("*", { count: "exact", head: true }).eq("activo", true),
-    // Asignaciones directas a compañía de miembros activos (para chart)
-    supabase.from("asignaciones").select("compania_id, companias(nombre), miembros!inner(activo)").not("compania_id", "is", null).eq("miembros.activo", true),
+    // Miembros activos con compañía asignada (para chart)
+    supabase.from("miembros").select("compania_id, companias(nombre)").eq("activo", true).not("compania_id", "is", null),
     // Últimos 5 cambios del audit_log
     supabase.from("audit_log").select("id, tabla, accion, created_at, datos_nuevos, datos_anteriores").order("created_at", { ascending: false }).limit(5),
     // Escuadras con su capacidad
     supabase.from("escuadras").select("id, nombre, max_miembros, pelotones(nombre, companias(nombre))"),
-    // Asignaciones activas a escuadras
-    supabase.from("asignaciones").select("escuadra_id, miembros!inner(activo)").not("escuadra_id", "is", null).eq("miembros.activo", true),
+    // Miembros activos en escuadras
+    supabase.from("miembros").select("escuadra_id").eq("activo", true).not("escuadra_id", "is", null),
   ])
 
   // ── Operadores por compañía ────────────────────────────────────────────────

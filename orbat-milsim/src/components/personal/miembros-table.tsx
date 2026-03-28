@@ -91,12 +91,10 @@ function buildUnidadMaps(estructura: EstructuraRegimiento[]): UnidadMaps {
 }
 
 function getUnidadLabelFromMaps(m: MiembroConPrincipal, maps: UnidadMaps): string {
-  const principal = m.asignaciones.find((a) => a.es_principal)
-  if (!principal) return "—"
-  if (principal.escuadra_id) return maps.escuadras.get(principal.escuadra_id) ?? "—"
-  if (principal.peloton_id) return maps.pelotones.get(principal.peloton_id) ?? "—"
-  if (principal.compania_id) return maps.companias.get(principal.compania_id) ?? "—"
-  if (principal.regimiento_id) return maps.regimientos.get(principal.regimiento_id) ?? "—"
+  if (m.escuadra_id) return maps.escuadras.get(m.escuadra_id) ?? "—"
+  if (m.peloton_id) return maps.pelotones.get(m.peloton_id) ?? "—"
+  if (m.compania_id) return maps.companias.get(m.compania_id) ?? "—"
+  if (m.regimiento_id) return maps.regimientos.get(m.regimiento_id) ?? "—"
   return "—"
 }
 
@@ -424,11 +422,6 @@ export function MiembrosTable({
                   <span className="text-slate-400 text-sm">
                     {getUnidadLabelFromMaps(m, unidadMaps)}
                   </span>
-                  {m.asignaciones.length > 1 && (
-                    <span className="ml-1.5 text-[10px] font-medium text-blue-400 border border-blue-500/30 bg-blue-500/10 rounded px-1 py-0.5">
-                      +{m.asignaciones.length - 1}
-                    </span>
-                  )}
                 </TableCell>
 
                 {/* Estado (toggle) */}

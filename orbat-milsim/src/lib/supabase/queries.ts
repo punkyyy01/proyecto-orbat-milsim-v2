@@ -3,7 +3,6 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type {
   AppRole,
-  AsignacionRow,
   CursoRow,
   MiembroCursoRow,
   MiembroRow,
@@ -34,9 +33,7 @@ export type MiembroOrbatPublico = Pick<
   "miembro_id" | "nombre_milsim" | "rango" | "rol" | "fecha_ingreso" | "es_principal"
 >;
 
-export type MiembroConPrincipal = MiembroRow & {
-  asignaciones: AsignacionRow[];
-};
+export type MiembroConPrincipal = MiembroRow;
 
 export type OrbatEscuadra = {
   id: string;
@@ -332,7 +329,6 @@ export async function getOrbatPublico(): Promise<OrbatRegimiento[]> {
 
 /**
  * Lista de miembros con paginación y filtros opcionales.
- * Embeds asignaciones para mostrar unidad principal y secundarias.
  */
 export async function getMiembros(
   filtros: MiembrosFiltros = {}
@@ -353,32 +349,19 @@ export async function getMiembros(
   const from = (page - 1) * pageSize;
   const to = from + pageSize - 1;
 
-  // Filtrar por unidad: resolver los miembro_ids que tienen esa asignación
-  let filteredIds: string[] | null = null;
-  if (regimiento_id || compania_id || peloton_id || escuadra_id) {
-    let asignQuery = supabase.from("asignaciones").select("miembro_id");
-    if (regimiento_id) asignQuery = asignQuery.eq("regimiento_id", regimiento_id);
-    if (compania_id) asignQuery = asignQuery.eq("compania_id", compania_id);
-    if (peloton_id) asignQuery = asignQuery.eq("peloton_id", peloton_id);
-    if (escuadra_id) asignQuery = asignQuery.eq("escuadra_id", escuadra_id);
-    const { data: aData, error: aError } = await asignQuery;
-    if (aError) throw new Error(`getMiembros (asignaciones): ${aError.message}`);
-    filteredIds = (aData ?? []).map((a) => a.miembro_id);
-    if (filteredIds.length === 0) {
-      return { data: [], count: 0, page, pageSize, totalPages: 0 };
-    }
-  }
-
   let query = supabase
     .from("miembros")
-    .select("*, asignaciones(*)", { count: "exact" })
+    .select("*", { count: "exact" })
     .range(from, to)
     .order("nombre_milsim");
 
   if (activo !== undefined) query = query.eq("activo", activo);
   if (rango) query = query.eq("rango", rango);
   if (busqueda) query = query.ilike("nombre_milsim", `%${busqueda}%`);
-  if (filteredIds !== null) query = query.in("id", filteredIds);
+  if (regimiento_id) query = query.eq("regimiento_id", regimiento_id);
+  if (compania_id) query = query.eq("compania_id", compania_id);
+  if (peloton_id) query = query.eq("peloton_id", peloton_id);
+  if (escuadra_id) query = query.eq("escuadra_id", escuadra_id);
 
   const { data, error, count } = await query;
 

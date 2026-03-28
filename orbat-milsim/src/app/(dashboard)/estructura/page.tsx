@@ -17,14 +17,21 @@ export const metadata: Metadata = { title: "Estructura" }
 async function getEstructuraConConteos(): Promise<RegimientoConConteo[]> {
   const supabase = await createClient()
 
-  const [estructura, asignacionesResult] = await Promise.all([
+  const [estructura, miembrosResult] = await Promise.all([
     getEstructura(),
     supabase
-      .from("asignaciones")
-      .select("regimiento_id, compania_id, peloton_id, escuadra_id, miembros(nombre_milsim, rango, rol)"),
+      .from("miembros")
+      .select("regimiento_id, compania_id, peloton_id, escuadra_id, nombre_milsim, rango, rol")
+      .eq("activo", true),
   ])
 
-  const asignaciones = asignacionesResult.data ?? []
+  const asignaciones = (miembrosResult.data ?? []).map((m) => ({
+    regimiento_id: m.regimiento_id,
+    compania_id: m.compania_id,
+    peloton_id: m.peloton_id,
+    escuadra_id: m.escuadra_id,
+    miembros: { nombre_milsim: m.nombre_milsim, rango: m.rango, rol: m.rol },
+  }))
 
   // Build lookup maps: child_id → parent_id
   const escuadraToPeloton: Record<string, string> = {}
