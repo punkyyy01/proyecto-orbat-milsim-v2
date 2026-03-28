@@ -222,63 +222,74 @@ function DiffViewer({
 
   return (
     <div className="space-y-1 font-mono text-xs">
-      {/* Header row */}
-      <div
-        className="grid grid-cols-[160px_1fr_1fr] gap-2 pb-1 mb-1"
-        style={{ borderBottom: "1px solid rgba(255,255,255,0.08)" }}
-      >
-        <span className="text-slate-600 text-[10px] uppercase tracking-wider">Campo</span>
-        <span className="text-red-400/60 text-[10px] uppercase tracking-wider">Anterior</span>
-        <span className="text-green-400/60 text-[10px] uppercase tracking-wider">Nuevo</span>
+      {/* Scrollable table area */}
+      <div className="overflow-x-auto">
+        <div className="min-w-[480px]">
+          {/* Header row */}
+          <div
+            className="grid gap-2 pb-1 mb-1"
+            style={{
+              gridTemplateColumns: "25% 37.5% 37.5%",
+              borderBottom: "1px solid rgba(255,255,255,0.08)",
+            }}
+          >
+            <span className="text-slate-600 text-[10px] uppercase tracking-wider">Campo</span>
+            <span className="text-red-400/60 text-[10px] uppercase tracking-wider">Anterior</span>
+            <span className="text-green-400/60 text-[10px] uppercase tracking-wider">Nuevo</span>
+          </div>
+
+          {/* Changed + optionally unchanged rows */}
+          <div className="max-h-80 overflow-y-auto space-y-0.5">
+            {displayKeys.length === 0 && (
+              <p className="text-slate-600 text-xs py-2">Sin campos para mostrar.</p>
+            )}
+            {displayKeys.map((key) => {
+              const valA    = JSON.stringify(a[key] ?? null)
+              const valD    = JSON.stringify(d[key] ?? null)
+              const changed = valA !== valD
+              const onlyInA = !(key in d)
+              const onlyInD = !(key in a)
+
+              return (
+                <div
+                  key={key}
+                  className="grid gap-2 py-1 px-2 rounded"
+                  style={{
+                    gridTemplateColumns: "25% 37.5% 37.5%",
+                    background: changed ? "rgba(234,179,8,0.06)" : "transparent",
+                  }}
+                >
+                  <span className={`break-all ${changed ? "text-yellow-400/80" : "text-slate-600"}`}>
+                    {key}
+                  </span>
+                  {/* Anterior */}
+                  <span className={`break-all ${
+                    onlyInA
+                      ? "text-red-400 line-through"
+                      : changed
+                        ? "text-red-400 line-through opacity-80"
+                        : "text-slate-600"
+                  }`}>
+                    {onlyInD ? "—" : valA}
+                  </span>
+                  {/* Nuevo */}
+                  <span className={`break-all ${
+                    onlyInD
+                      ? "text-green-400"
+                      : changed
+                        ? "text-green-400"
+                        : "text-slate-600"
+                  }`}>
+                    {onlyInA ? "—" : valD}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
       </div>
 
-      {/* Changed + optionally unchanged rows */}
-      <div className="max-h-80 overflow-y-auto space-y-0.5">
-        {displayKeys.length === 0 && (
-          <p className="text-slate-600 text-xs py-2">Sin campos para mostrar.</p>
-        )}
-        {displayKeys.map((key) => {
-          const valA    = JSON.stringify(a[key] ?? null)
-          const valD    = JSON.stringify(d[key] ?? null)
-          const changed = valA !== valD
-          const onlyInA = !(key in d)
-          const onlyInD = !(key in a)
-
-          return (
-            <div
-              key={key}
-              className="grid grid-cols-[160px_1fr_1fr] gap-2 py-1 px-2 rounded"
-              style={{ background: changed ? "rgba(234,179,8,0.06)" : "transparent" }}
-            >
-              <span className={changed ? "text-yellow-400/80" : "text-slate-600"}>
-                {key}
-              </span>
-              {/* Anterior */}
-              <span className={
-                onlyInA
-                  ? "text-red-400 line-through"
-                  : changed
-                    ? "text-red-400 line-through opacity-80"
-                    : "text-slate-600"
-              }>
-                {onlyInD ? "—" : valA}
-              </span>
-              {/* Nuevo */}
-              <span className={
-                onlyInD
-                  ? "text-green-400"
-                  : changed
-                    ? "text-green-400"
-                    : "text-slate-600"
-              }>
-                {onlyInA ? "—" : valD}
-              </span>
-            </div>
-          )
-        })}
-      </div>
-
-      {/* Toggle unchanged */}
+      {/* Toggle unchanged — outside scroll so it's always reachable */}
       {unchangedKeys.length > 0 && (
         <button
           onClick={() => setShowAll(v => !v)}
@@ -540,7 +551,7 @@ export function AuditoriaContent({ logs, total, page, pageSize, filtros, usuario
       {/* Diff Dialog */}
       <Dialog open={!!selectedLog} onOpenChange={(open) => !open && setSelectedLog(null)}>
         <DialogContent
-          className="max-w-3xl border"
+          className="w-[calc(100vw-2rem)] max-w-4xl border"
           style={{ background: "#0f172a", borderColor: "rgba(255,255,255,0.1)" }}
         >
           {selectedLog && (
@@ -561,11 +572,11 @@ export function AuditoriaContent({ logs, total, page, pageSize, filtros, usuario
 
               <div className="space-y-4 mt-2">
                 <div className="text-xs text-slate-500 space-y-0.5">
-                  <p>
+                  <p className="break-all">
                     <span className="text-slate-600">ID registro:</span>{" "}
                     <span className="font-mono">{selectedLog.registro_id}</span>
                   </p>
-                  <p>
+                  <p className="break-all">
                     <span className="text-slate-600">Usuario:</span>{" "}
                     <span className="font-mono">{selectedLog.usuario_id ?? "sistema"}</span>
                   </p>
