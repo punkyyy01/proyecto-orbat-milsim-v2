@@ -57,7 +57,11 @@ SELECT id, peloton_id, true, 0 FROM miembros WHERE peloton_id IS NOT NULL;
 INSERT INTO asignaciones (miembro_id, escuadra_id, es_principal, orden)
 SELECT id, escuadra_id, true, 0 FROM miembros WHERE escuadra_id IS NOT NULL;
 
--- ─── PASO 3: Eliminar FKs de miembros ────────────────────────────────────────
+-- ─── PASO 3: Eliminar vistas dependientes y FKs de miembros ─────────────────
+-- Las vistas deben caer ANTES de eliminar las columnas de las que dependen.
+
+DROP VIEW IF EXISTS vista_orbat CASCADE;
+DROP VIEW IF EXISTS vista_orbat_publica CASCADE;
 
 ALTER TABLE miembros DROP CONSTRAINT IF EXISTS chk_single_assignment;
 ALTER TABLE miembros DROP COLUMN IF EXISTS regimiento_id;

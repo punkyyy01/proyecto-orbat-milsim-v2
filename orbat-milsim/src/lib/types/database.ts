@@ -224,10 +224,6 @@ export interface Database {
           discord_id: string | null;
           steam_id: string | null;
           notas_admin: string | null;
-          escuadra_id: string | null;
-          peloton_id: string | null;
-          compania_id: string | null;
-          regimiento_id: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -241,10 +237,6 @@ export interface Database {
           discord_id?: string | null;
           steam_id?: string | null;
           notas_admin?: string | null;
-          escuadra_id?: string | null;
-          peloton_id?: string | null;
-          compania_id?: string | null;
-          regimiento_id?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -258,36 +250,54 @@ export interface Database {
           discord_id?: string | null;
           steam_id?: string | null;
           notas_admin?: string | null;
-          escuadra_id?: string | null;
-          peloton_id?: string | null;
-          compania_id?: string | null;
-          regimiento_id?: string | null;
           created_at?: string;
           updated_at?: string;
         };
+        Relationships: [];
+      };
+
+      asignaciones: {
+        Row: {
+          id: string;
+          miembro_id: string;
+          regimiento_id: string | null;
+          compania_id: string | null;
+          peloton_id: string | null;
+          escuadra_id: string | null;
+          es_principal: boolean;
+          rol_en_unidad: string | null;
+          orden: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          miembro_id: string;
+          regimiento_id?: string | null;
+          compania_id?: string | null;
+          peloton_id?: string | null;
+          escuadra_id?: string | null;
+          es_principal?: boolean;
+          rol_en_unidad?: string | null;
+          orden?: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          miembro_id?: string;
+          regimiento_id?: string | null;
+          compania_id?: string | null;
+          peloton_id?: string | null;
+          escuadra_id?: string | null;
+          es_principal?: boolean;
+          rol_en_unidad?: string | null;
+          orden?: number;
+          created_at?: string;
+        };
         Relationships: [
           {
-            foreignKeyName: "miembros_escuadra_id_fkey";
-            columns: ["escuadra_id"];
-            referencedRelation: "escuadras";
-            referencedColumns: ["id"];
-          },
-          {
-            foreignKeyName: "miembros_peloton_id_fkey";
-            columns: ["peloton_id"];
-            referencedRelation: "pelotones";
-            referencedColumns: ["id"];
-          },
-          {
-            foreignKeyName: "miembros_compania_id_fkey";
-            columns: ["compania_id"];
-            referencedRelation: "companias";
-            referencedColumns: ["id"];
-          },
-          {
-            foreignKeyName: "miembros_regimiento_id_fkey";
-            columns: ["regimiento_id"];
-            referencedRelation: "regimientos";
+            foreignKeyName: "asignaciones_miembro_id_fkey";
+            columns: ["miembro_id"];
+            referencedRelation: "miembros";
             referencedColumns: ["id"];
           },
         ];

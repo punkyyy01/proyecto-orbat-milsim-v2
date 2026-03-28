@@ -349,6 +349,19 @@ export async function getMiembros(
   const from = (page - 1) * pageSize;
   const to = from + pageSize - 1;
 
+  // Si hay filtro por unidad, primero obtenemos los miembro_id desde asignaciones
+  let miembroIdsFilter: string[] | null = null;
+  const unitFilter = regimiento_id ?? compania_id ?? peloton_id ?? escuadra_id;
+  if (unitFilter) {
+    let asignQuery = supabase.from("asignaciones").select("miembro_id");
+    if (regimiento_id) asignQuery = asignQuery.eq("regimiento_id", regimiento_id);
+    if (compania_id) asignQuery = asignQuery.eq("compania_id", compania_id);
+    if (peloton_id) asignQuery = asignQuery.eq("peloton_id", peloton_id);
+    if (escuadra_id) asignQuery = asignQuery.eq("escuadra_id", escuadra_id);
+    const { data: asignData } = await asignQuery;
+    miembroIdsFilter = (asignData ?? []).map((a) => a.miembro_id);
+  }
+
   let query = supabase
     .from("miembros")
     .select("*", { count: "exact" })
@@ -358,10 +371,14 @@ export async function getMiembros(
   if (activo !== undefined) query = query.eq("activo", activo);
   if (rango) query = query.eq("rango", rango);
   if (busqueda) query = query.ilike("nombre_milsim", `%${busqueda}%`);
-  if (regimiento_id) query = query.eq("regimiento_id", regimiento_id);
-  if (compania_id) query = query.eq("compania_id", compania_id);
-  if (peloton_id) query = query.eq("peloton_id", peloton_id);
-  if (escuadra_id) query = query.eq("escuadra_id", escuadra_id);
+  if (miembroIdsFilter !== null) {
+    if (miembroIdsFilter.length === 0) {
+      // No hay miembros en esa unidad — forzar resultado vacío
+      query = query.in("id", ["00000000-0000-0000-0000-000000000000"]);
+    } else {
+      query = query.in("id", miembroIdsFilter);
+    }
+  }
 
   const { data, error, count } = await query;
 

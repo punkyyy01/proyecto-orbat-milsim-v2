@@ -7,17 +7,31 @@ export type ActionResult = { error: string } | { success: true }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-/** Mueve la escuadra de un miembro actualizando el campo directo en la tabla miembros. */
+/** Mueve la asignación principal de un miembro a otra escuadra. */
 async function moverAEscuadra(
   supabase: Awaited<ReturnType<typeof createClient>>,
   miembroId: string,
   targetEscuadraId: string
 ): Promise<{ error: string } | { success: true }> {
-  const { error } = await supabase
-    .from("miembros")
-    .update({ escuadra_id: targetEscuadraId })
-    .eq("id", miembroId)
-  if (error) return { error: error.message }
+  const { data: principal } = await supabase
+    .from("asignaciones")
+    .select("id")
+    .eq("miembro_id", miembroId)
+    .eq("es_principal", true)
+    .maybeSingle()
+
+  if (principal) {
+    const { error } = await supabase
+      .from("asignaciones")
+      .update({ escuadra_id: targetEscuadraId, peloton_id: null, compania_id: null, regimiento_id: null })
+      .eq("id", principal.id)
+    if (error) return { error: error.message }
+  } else {
+    const { error } = await supabase
+      .from("asignaciones")
+      .insert({ miembro_id: miembroId, escuadra_id: targetEscuadraId, es_principal: true })
+    if (error) return { error: error.message }
+  }
   return { success: true }
 }
 
@@ -34,7 +48,7 @@ export async function transferirMiembro(
   // Verificar capacidad en paralelo
   const [escuadraRes, countRes] = await Promise.all([
     supabase.from("escuadras").select("max_miembros").eq("id", targetEscuadraId).single(),
-    supabase.from("miembros").select("*", { count: "exact", head: true }).eq("escuadra_id", targetEscuadraId),
+    supabase.from("asignaciones").select("*", { count: "exact", head: true }).eq("escuadra_id", targetEscuadraId),
   ])
 
   if (escuadraRes.error || !escuadraRes.data) return { error: "Escuadra no encontrada" }
