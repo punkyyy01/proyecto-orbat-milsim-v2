@@ -69,6 +69,7 @@ export type CompaniaConConteo = {
   orden: number
   total_miembros: number
   pelotones: PelotonConConteo[]
+  escuadras_directas: EscuadraConConteo[]
 }
 
 export type RegimientoConConteo = {
@@ -109,7 +110,11 @@ function pelMatches(p: PelotonConConteo, q: string) {
   return matchesSearch(p.nombre, q) || p.escuadras.some((e) => escMatches(e, q))
 }
 function compMatches(c: CompaniaConConteo, q: string) {
-  return matchesSearch(c.nombre, q) || c.pelotones.some((p) => pelMatches(p, q))
+  return (
+    matchesSearch(c.nombre, q) ||
+    c.pelotones.some((p) => pelMatches(p, q)) ||
+    c.escuadras_directas.some((e) => escMatches(e, q))
+  )
 }
 function regMatches(r: RegimientoConConteo, q: string) {
   return matchesSearch(r.nombre, q) || r.companias.some((c) => compMatches(c, q))
@@ -123,6 +128,7 @@ function allIds(regimientos: RegimientoConConteo[]): Set<string> {
     ids.add(reg.id)
     for (const comp of reg.companias) {
       ids.add(comp.id)
+      for (const esc of comp.escuadras_directas) ids.add(esc.id)
       for (const pel of comp.pelotones) {
         ids.add(pel.id)
         for (const esc of pel.escuadras) ids.add(esc.id)
@@ -368,7 +374,7 @@ const connH = (
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-type AddingTo = { parentId: string; level: "reg" | "comp" | "pel" | "esc" }
+type AddingTo = { parentId: string; level: "reg" | "comp" | "pel" | "esc" | "esc-comp" }
 type DeletingInfo = {
   id: string
   type: "reg" | "comp" | "pel" | "esc"
@@ -453,8 +459,12 @@ export function ArbolEstructura({
       } else if (level === "pel") {
         fd.set("compania_id", parentId)
         result = await crearPeloton(fd)
-      } else {
+      } else if (level === "esc") {
         fd.set("peloton_id", parentId)
+        result = await crearEscuadra(fd)
+      } else {
+        // "esc-comp": escuadra directa bajo compañía (sin pelotón)
+        fd.set("compania_id", parentId)
         result = await crearEscuadra(fd)
       }
       if ("error" in result) toast.error(result.error)
@@ -786,6 +796,13 @@ export function ArbolEstructura({
                                   <Plus className="w-3 h-3" />
                                 </button>
                                 <button
+                                  onClick={() => setAddingTo({ parentId: comp.id, level: "esc-comp" })}
+                                  title="Agregar escuadra directa (sin pelotón)"
+                                  className="p-1 rounded text-slate-500 hover:text-cyan-400 hover:bg-cyan-500/10 transition-colors"
+                                >
+                                  <span className="text-[10px] font-mono leading-none">👥</span>
+                                </button>
+                                <button
                                   onClick={() => setEditingId(comp.id)}
                                   title="Editar nombre"
                                   className="p-1 rounded text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors"
@@ -811,7 +828,7 @@ export function ArbolEstructura({
                             )}
                           </div>
 
-                          {/* Pelotones */}
+                          {/* Pelotones y escuadras directas */}
                           {compOpen && (
                             <div>
                               {addingTo?.parentId === comp.id && addingTo.level === "pel" && (
@@ -823,8 +840,119 @@ export function ArbolEstructura({
                                   />
                                 </div>
                               )}
-                              {filteredPels.length === 0 && !addingTo && (
-                                <p className="text-xs text-slate-600 italic py-1 ml-12">Sin pelotones</p>
+                              {addingTo?.parentId === comp.id && addingTo.level === "esc-comp" && (
+                                <div className="ml-12 mt-0.5">
+                                  <InlineAddInput
+                                    placeholder="Nombre de la escuadra directa…"
+                                    onAdd={handleAdd}
+                                    onCancel={() => setAddingTo(null)}
+                                  />
+                                </div>
+                              )}
+                              {filteredPels.length === 0 && comp.escuadras_directas.length === 0 && !addingTo && (
+                                <p className="text-xs text-slate-600 italic py-1 ml-12">Sin pelotones ni escuadras</p>
+                              )}
+                              {/* Escuadras directas bajo compañía (sin pelotón) */}
+                              {comp.escuadras_directas.length > 0 && (
+                                <div
+                                  className="ml-8 border-l mt-0.5"
+                                  style={{ borderColor: "rgba(255,255,255,0.06)" }}
+                                >
+                                  {(q
+                                    ? matchesSearch(comp.nombre, q)
+                                      ? comp.escuadras_directas
+                                      : comp.escuadras_directas.filter((e) => escMatches(e, q))
+                                    : comp.escuadras_directas
+                                  ).map((esc) => {
+                                    const escOpen = isOpen(esc.id)
+                                    const isEditingEsc = editingId === esc.id
+                                    const isDeletingEsc = deletingInfo?.id === esc.id
+                                    const isDraggingEsc = dragging?.id === esc.id
+                                    const isDragOverEsc = dragOverId === esc.id
+                                    const hasMembers = esc.miembros.length > 0
+
+                                    return (
+                                      <div
+                                        key={esc.id}
+                                        className={`relative transition-opacity ${isDraggingEsc ? "opacity-30" : ""}`}
+                                        draggable
+                                        onDragStart={(e) => { e.stopPropagation(); setDragging({ id: esc.id, type: "esc" }) }}
+                                        onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); if (dragging?.type === "esc") setDragOverId(esc.id) }}
+                                        onDragLeave={() => setDragOverId(null)}
+                                        onDragEnd={() => { setDragging(null); setDragOverId(null) }}
+                                        onDrop={(e) => { e.stopPropagation(); handleDrop(esc.id, "esc") }}
+                                      >
+                                        {connH}
+                                        <div
+                                          className={`flex items-center gap-1.5 pl-4 pr-2 py-1.5 rounded hover:bg-white/3 group/row transition-colors ${isDragOverEsc ? "bg-blue-500/8 outline outline-1 outline-blue-500/20" : ""}`}
+                                        >
+                                          <GripVertical className="w-3 h-3 text-slate-700 shrink-0 cursor-grab active:cursor-grabbing" />
+                                          {hasMembers ? (
+                                            <button onClick={() => toggle(esc.id)} className="text-slate-500 hover:text-slate-300 shrink-0 transition-colors">
+                                              {escOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                                            </button>
+                                          ) : (
+                                            <span className="w-3 shrink-0" />
+                                          )}
+                                          <span className="text-sm shrink-0" aria-hidden>👥</span>
+                                          <div className="flex-1 min-w-0">
+                                            {isDeletingEsc ? (
+                                              <InlineDeleteConfirm
+                                                nombre={esc.nombre}
+                                                hijos={esc.total_miembros || undefined}
+                                                hijosLabel="miembros quedarán sin unidad"
+                                                onConfirm={handleDelete}
+                                                onCancel={() => setDeletingInfo(null)}
+                                                pending={pending}
+                                              />
+                                            ) : (
+                                              <div className="flex items-center gap-2 flex-wrap">
+                                                <InlineName
+                                                  value={esc.nombre}
+                                                  isEditing={isEditingEsc}
+                                                  onStartEdit={() => setEditingId(esc.id)}
+                                                  onSave={(n) => saveName(esc.id, n, "esc", esc.indicativo_radio ? { indicativo_radio: esc.indicativo_radio } : undefined)}
+                                                  onCancel={() => setEditingId(null)}
+                                                  q={q}
+                                                  className="text-slate-400 text-sm"
+                                                />
+                                                <IndicativoInline escuadraId={esc.id} valor={esc.indicativo_radio} />
+                                                <FillBadge current={esc.total_miembros} max={esc.max_miembros} />
+                                              </div>
+                                            )}
+                                          </div>
+                                          {!isDeletingEsc && !isEditingEsc && (
+                                            <div className="flex items-center gap-0.5 opacity-0 group-hover/row:opacity-100 transition-opacity shrink-0">
+                                              <button onClick={() => setEditingId(esc.id)} title="Editar nombre" className="p-1 rounded text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors">
+                                                <Pencil className="w-3 h-3" />
+                                              </button>
+                                              <button
+                                                onClick={() => setDeletingInfo({ id: esc.id, type: "esc", nombre: esc.nombre, hijos: esc.total_miembros || undefined, hijosLabel: "miembros quedarán sin unidad" })}
+                                                title="Eliminar"
+                                                className="p-1 rounded text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                                              >
+                                                <Trash2 className="w-3 h-3" />
+                                              </button>
+                                            </div>
+                                          )}
+                                        </div>
+                                        {hasMembers && escOpen && (
+                                          <div className="ml-12 mb-1 border-l" style={{ borderColor: "rgba(255,255,255,0.05)" }}>
+                                            {esc.miembros.map((m, i) => (
+                                              <div key={i} className="relative flex items-center gap-1.5 pl-3 py-0.5 text-xs text-slate-500">
+                                                <div className="absolute left-0 top-[0.6rem] w-3 border-t pointer-events-none" style={{ borderColor: "rgba(255,255,255,0.05)" }} />
+                                                <span className="shrink-0 text-slate-600">•</span>
+                                                {m.rango && <span className="font-mono text-slate-600 shrink-0">[{m.rango}]</span>}
+                                                <span className="text-slate-400 truncate">{m.nombre_milsim}</span>
+                                                {m.rol && <span className="text-slate-600 shrink-0">— {m.rol}</span>}
+                                              </div>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    )
+                                  })}
+                                </div>
                               )}
 
                               {/* Vertical line for pelotones */}

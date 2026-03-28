@@ -55,7 +55,9 @@ export type OrbatCompania = {
   logo_url: string | null;
   orden: number;
   pelotones: OrbatPeloton[];
-  /** Miembros asignados directamente a la compañía (sin pelotón) */
+  /** Escuadras asignadas directamente a la compañía (sin pelotón, ej. RSTB) */
+  escuadras_directas: OrbatEscuadra[];
+  /** Miembros asignados directamente a la compañía (sin pelotón ni escuadra) */
   miembros_directos: MiembroOrbat[];
 };
 
@@ -116,6 +118,8 @@ export type EstructuraCompania = {
   logo_url: string | null;
   orden: number;
   pelotones: EstructuraPeloton[];
+  /** Escuadras directamente bajo esta compañía (sin pelotón, ej. RSTB) */
+  escuadras_directas: EstructuraEscuadra[];
 };
 
 export type EstructuraRegimiento = {
@@ -181,12 +185,31 @@ function groupOrbatRows(rows: VistaOrbatRow[]): OrbatRegimiento[] {
         logo_url: row.compania_logo_url,
         orden: row.compania_orden ?? 0,
         pelotones: [],
+        escuadras_directas: [],
         miembros_directos: [],
       };
       regimiento.companias.push(compania);
     }
 
-    // Miembro asignado directamente a la compañía
+    // Escuadra directa bajo compañía (sin pelotón — caso RSTB)
+    if (!row.peloton_id && row.escuadra_id) {
+      let escuadraDirecta = compania.escuadras_directas.find((e) => e.id === row.escuadra_id);
+      if (!escuadraDirecta) {
+        escuadraDirecta = {
+          id: row.escuadra_id,
+          nombre: row.escuadra_nombre!,
+          indicativo_radio: row.escuadra_indicativo_radio,
+          max_miembros: row.escuadra_max_miembros ?? 6,
+          orden: row.escuadra_orden ?? 0,
+          miembros: [],
+        };
+        compania.escuadras_directas.push(escuadraDirecta);
+      }
+      escuadraDirecta.miembros.push(extractMiembro(row));
+      continue;
+    }
+
+    // Miembro asignado directamente a la compañía (sin pelotón ni escuadra)
     if (!row.peloton_id) {
       compania.miembros_directos.push(extractMiembro(row));
       continue;
@@ -233,6 +256,7 @@ function groupOrbatRows(rows: VistaOrbatRow[]): OrbatRegimiento[] {
   for (const reg of result) {
     reg.companias.sort((a, b) => a.orden - b.orden);
     for (const comp of reg.companias) {
+      comp.escuadras_directas.sort((a, b) => a.orden - b.orden);
       comp.pelotones.sort((a, b) => a.orden - b.orden);
       for (const pel of comp.pelotones) {
         pel.escuadras.sort((a, b) => a.orden - b.orden);
@@ -401,6 +425,9 @@ export const getEstructura = unstable_cache(
             escuadras (
               id, nombre, indicativo_radio, max_miembros, orden
             )
+          ),
+          escuadras!compania_id (
+            id, nombre, indicativo_radio, max_miembros, orden
           )
         )
       `
@@ -421,6 +448,10 @@ export const getEstructura = unstable_cache(
           nombre: comp.nombre,
           logo_url: comp.logo_url,
           orden: comp.orden,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          escuadras_directas: ((comp as any).escuadras ?? []).sort(
+            (a: EstructuraEscuadra, b: EstructuraEscuadra) => a.orden - b.orden
+          ),
           pelotones: (comp.pelotones ?? [])
             .sort((a, b) => a.orden - b.orden)
             .map((pel) => ({

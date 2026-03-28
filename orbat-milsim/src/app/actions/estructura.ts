@@ -226,24 +226,28 @@ export async function reordenarPeloton(
 export async function crearEscuadra(formData: FormData): Promise<ActionResult> {
   const supabase = await createClient()
   const nombre = (formData.get("nombre") as string)?.trim()
-  const peloton_id = formData.get("peloton_id") as string
+  const peloton_id = (formData.get("peloton_id") as string) || null
+  const compania_id = (formData.get("compania_id") as string) || null
   const indicativo_radio =
     (formData.get("indicativo_radio") as string)?.trim() || null
+
   if (!nombre) return { error: "El nombre es requerido" }
-  if (!peloton_id) return { error: "El pelotón es requerido" }
+  if (!peloton_id && !compania_id)
+    return { error: "Se requiere un pelotón o una compañía como padre" }
+  if (peloton_id && compania_id)
+    return { error: "La escuadra no puede pertenecer a un pelotón y a una compañía a la vez" }
 
-  const { data: siblings } = await supabase
-    .from("escuadras")
-    .select("orden")
-    .eq("peloton_id", peloton_id)
-    .order("orden", { ascending: false })
-    .limit(1)
+  // Calcular orden como el siguiente al último hermano
+  let siblingsQuery = supabase.from("escuadras").select("orden").order("orden", { ascending: false }).limit(1)
+  if (peloton_id) siblingsQuery = siblingsQuery.eq("peloton_id", peloton_id)
+  else siblingsQuery = siblingsQuery.eq("compania_id", compania_id!)
 
+  const { data: siblings } = await siblingsQuery
   const orden = siblings && siblings.length > 0 ? siblings[0].orden + 1 : 1
 
   const { error } = await supabase
     .from("escuadras")
-    .insert({ nombre, peloton_id, indicativo_radio, orden })
+    .insert({ nombre, peloton_id, compania_id, indicativo_radio, orden })
   if (error) return { error: error.message }
   revalidatePath("/estructura")
   return { success: true }
@@ -298,7 +302,7 @@ export async function reordenarEscuadra(
 
   const { data: current, error: e1 } = await supabase
     .from("escuadras")
-    .select("orden, peloton_id")
+    .select("orden, peloton_id, compania_id")
     .eq("id", id)
     .single()
 
@@ -307,12 +311,15 @@ export async function reordenarEscuadra(
   const targetOrden =
     direction === "up" ? current.orden - 1 : current.orden + 1
 
-  const { data: sibling, error: e2 } = await supabase
+  let siblingQuery = supabase
     .from("escuadras")
     .select("id, orden")
-    .eq("peloton_id", current.peloton_id)
     .eq("orden", targetOrden)
-    .single()
+
+  if (current.peloton_id) siblingQuery = siblingQuery.eq("peloton_id", current.peloton_id)
+  else siblingQuery = siblingQuery.eq("compania_id", current.compania_id!)
+
+  const { data: sibling, error: e2 } = await siblingQuery.single()
 
   if (e2 || !sibling) return { success: true }
 

@@ -70,6 +70,7 @@ function countRegimiento(reg: OrbatRegimiento): number {
       (s, c) =>
         s +
         c.miembros_directos.length +
+        c.escuadras_directas.reduce((s2, e) => s2 + e.miembros.length, 0) +
         c.pelotones.reduce(
           (s2, p) =>
             s2 +
@@ -307,6 +308,7 @@ function PelotonCard({ peloton }: { peloton: OrbatPeloton }) {
 function CompaniaCard({ compania }: { compania: OrbatCompania }) {
   const total =
     compania.miembros_directos.length +
+    compania.escuadras_directas.reduce((s, e) => s + e.miembros.length, 0) +
     compania.pelotones.reduce(
       (s, p) =>
         s +
@@ -355,6 +357,17 @@ function CompaniaCard({ compania }: { compania: OrbatCompania }) {
       <div className="p-4">
         <EstadoMayor miembros={compania.miembros_directos} label="CO HQ" />
 
+        {/* Escuadras directas bajo compañía (sin pelotón — caso RSTB) */}
+        {compania.escuadras_directas.length > 0 && (
+          <TreeBranch>
+            {compania.escuadras_directas.map((esc) => (
+              <TreeNode key={esc.id}>
+                <EscuadraCard escuadra={esc} />
+              </TreeNode>
+            ))}
+          </TreeBranch>
+        )}
+
         {compania.pelotones.length > 0 && (
           <TreeBranch>
             {compania.pelotones.map((plt) => (
@@ -366,6 +379,7 @@ function CompaniaCard({ compania }: { compania: OrbatCompania }) {
         )}
 
         {compania.pelotones.length === 0 &&
+          compania.escuadras_directas.length === 0 &&
           compania.miembros_directos.length === 0 && (
             <p className="text-sm italic" style={{ color: C.textDim }}>
               Sin unidades asignadas

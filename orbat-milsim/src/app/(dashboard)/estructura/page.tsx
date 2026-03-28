@@ -29,12 +29,16 @@ async function getEstructuraConConteos(): Promise<RegimientoConConteo[]> {
 
   // Build lookup maps: child_id → parent_id
   const escuadraToPeloton: Record<string, string> = {}
+  const escuadraToCompania: Record<string, string> = {}  // para escuadras directas
   const pelotoneToCompania: Record<string, string> = {}
   const companiaToRegimiento: Record<string, string> = {}
 
   for (const reg of estructura) {
     for (const comp of reg.companias) {
       companiaToRegimiento[comp.id] = reg.id
+      for (const esc of comp.escuadras_directas) {
+        escuadraToCompania[esc.id] = comp.id
+      }
       for (const pel of comp.pelotones) {
         pelotoneToCompania[pel.id] = comp.id
         for (const esc of pel.escuadras) {
@@ -62,10 +66,19 @@ async function getEstructuraConConteos(): Promise<RegimientoConConteo[]> {
         rango: m.rango ?? null,
         rol: m.rol ?? null,
       })
+      // Escuadra bajo pelotón
       const pelId = escuadraToPeloton[m.escuadra_id]
       if (pelId) {
         porPeloton[pelId] = (porPeloton[pelId] ?? 0) + 1
         const compId = pelotoneToCompania[pelId]
+        if (compId) {
+          porCompania[compId] = (porCompania[compId] ?? 0) + 1
+          const regId = companiaToRegimiento[compId]
+          if (regId) porRegimiento[regId] = (porRegimiento[regId] ?? 0) + 1
+        }
+      } else {
+        // Escuadra directa bajo compañía
+        const compId = escuadraToCompania[m.escuadra_id]
         if (compId) {
           porCompania[compId] = (porCompania[compId] ?? 0) + 1
           const regId = companiaToRegimiento[compId]
@@ -98,6 +111,13 @@ async function getEstructuraConConteos(): Promise<RegimientoConConteo[]> {
         (comp): CompaniaConConteo => ({
           ...comp,
           total_miembros: porCompania[comp.id] ?? 0,
+          escuadras_directas: comp.escuadras_directas.map(
+            (esc): EscuadraConConteo => ({
+              ...esc,
+              total_miembros: porEscuadra[esc.id] ?? 0,
+              miembros: miembrosPorEscuadra[esc.id] ?? [],
+            })
+          ),
           pelotones: comp.pelotones.map(
             (pel): PelotonConConteo => ({
               ...pel,
@@ -129,7 +149,10 @@ export default async function EstructuraPage() {
       r.companias.length +
       r.companias.reduce(
         (a, c) =>
-          a + c.pelotones.length + c.pelotones.reduce((b, p) => b + p.escuadras.length, 0),
+          a +
+          c.escuadras_directas.length +
+          c.pelotones.length +
+          c.pelotones.reduce((b, p) => b + p.escuadras.length, 0),
         0
       ),
     0

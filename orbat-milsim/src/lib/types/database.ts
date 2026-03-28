@@ -143,7 +143,10 @@ export interface Database {
         Row: {
           id: string;
           nombre: string;
-          peloton_id: string;
+          /** null cuando la escuadra cuelga directamente de una compañía */
+          peloton_id: string | null;
+          /** null cuando la escuadra cuelga de un pelotón */
+          compania_id: string | null;
           indicativo_radio: string | null;
           max_miembros: number;
           orden: number;
@@ -152,7 +155,8 @@ export interface Database {
         Insert: {
           id?: string;
           nombre: string;
-          peloton_id: string;
+          peloton_id?: string | null;
+          compania_id?: string | null;
           indicativo_radio?: string | null;
           max_miembros?: number;
           orden: number;
@@ -161,7 +165,8 @@ export interface Database {
         Update: {
           id?: string;
           nombre?: string;
-          peloton_id?: string;
+          peloton_id?: string | null;
+          compania_id?: string | null;
           indicativo_radio?: string | null;
           max_miembros?: number;
           orden?: number;
@@ -172,6 +177,12 @@ export interface Database {
             foreignKeyName: "escuadras_peloton_id_fkey";
             columns: ["peloton_id"];
             referencedRelation: "pelotones";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "escuadras_compania_id_fkey";
+            columns: ["compania_id"];
+            referencedRelation: "companias";
             referencedColumns: ["id"];
           },
         ];
