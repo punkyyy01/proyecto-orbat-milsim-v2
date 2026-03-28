@@ -2,7 +2,7 @@ import type { Metadata } from "next"
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { AuditoriaContent } from "@/components/auditoria/auditoria-content"
-import type { AuditLogEntry, AuditoriaFiltros } from "@/components/auditoria/auditoria-content"
+import type { AuditLogEntry, AuditoriaFiltros, AuditUsuario } from "@/components/auditoria/auditoria-content"
 
 export const metadata: Metadata = { title: "Auditoría" }
 
@@ -11,7 +11,7 @@ const PAGE_SIZE = 25
 export default async function AuditoriaPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tabla?: string; accion?: string; desde?: string; hasta?: string; page?: string }>
+  searchParams: Promise<{ tabla?: string; accion?: string; desde?: string; hasta?: string; usuario?: string; page?: string }>
 }) {
   const supabase = await createClient()
 
@@ -29,16 +29,31 @@ export default async function AuditoriaPage({
 
   const params = await searchParams
   const filtros: AuditoriaFiltros = {
-    tabla:  params.tabla,
-    accion: params.accion,
-    desde:  params.desde,
-    hasta:  params.hasta,
-    page:   params.page,
+    tabla:   params.tabla,
+    accion:  params.accion,
+    desde:   params.desde,
+    hasta:   params.hasta,
+    usuario: params.usuario,
+    page:    params.page,
   }
 
   const currentPage = Math.max(1, parseInt(params.page ?? "1"))
   const from = (currentPage - 1) * PAGE_SIZE
   const to   = from + PAGE_SIZE - 1
+
+  // Fetch distinct users for filter dropdown
+  const { data: usuariosRaw } = await supabase
+    .from("audit_log")
+    .select("usuario_id, usuario_email")
+    .not("usuario_email", "is", null)
+
+  const usuariosMap = new Map<string, AuditUsuario>()
+  for (const u of usuariosRaw ?? []) {
+    if (u.usuario_email && !usuariosMap.has(u.usuario_email)) {
+      usuariosMap.set(u.usuario_email, { id: u.usuario_id, email: u.usuario_email })
+    }
+  }
+  const usuarios = [...usuariosMap.values()]
 
   let query = supabase
     .from("audit_log")
@@ -46,10 +61,11 @@ export default async function AuditoriaPage({
     .order("created_at", { ascending: false })
     .range(from, to)
 
-  if (filtros.tabla)  query = query.eq("tabla",  filtros.tabla)
-  if (filtros.accion) query = query.eq("accion", filtros.accion)
-  if (filtros.desde)  query = query.gte("created_at", filtros.desde)
-  if (filtros.hasta)  query = query.lte("created_at", filtros.hasta + "T23:59:59.999Z")
+  if (filtros.tabla)   query = query.eq("tabla",          filtros.tabla)
+  if (filtros.accion)  query = query.eq("accion",         filtros.accion)
+  if (filtros.usuario) query = query.eq("usuario_email",  filtros.usuario)
+  if (filtros.desde)   query = query.gte("created_at",    filtros.desde)
+  if (filtros.hasta)   query = query.lte("created_at",    filtros.hasta + "T23:59:59.999Z")
 
   const { data: logs, count } = await query
 
@@ -60,6 +76,7 @@ export default async function AuditoriaPage({
       page={currentPage}
       pageSize={PAGE_SIZE}
       filtros={filtros}
+      usuarios={usuarios}
     />
   )
 }
