@@ -70,7 +70,9 @@ export function BulkImportCursosDialog({ open, onOpenChange }: Props) {
   function handleSubmit() {
     if (validas.length === 0) return
     startTransition(async () => {
-      const result = await importarCursosBulk(validas)
+      const result = await importarCursosBulk(
+        validas.map(({ sigla, nombre, descripcion }) => ({ sigla, nombre, descripcion }))
+      )
       if (result.error) {
         toast.error(result.error)
       } else {
