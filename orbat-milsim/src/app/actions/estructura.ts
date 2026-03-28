@@ -231,11 +231,16 @@ export async function crearEscuadra(formData: FormData): Promise<ActionResult> {
   const indicativo_radio =
     (formData.get("indicativo_radio") as string)?.trim() || null
 
+  const max_miembros_raw = formData.get("max_miembros") as string | null
+  const max_miembros = max_miembros_raw ? parseInt(max_miembros_raw, 10) : undefined
+
   if (!nombre) return { error: "El nombre es requerido" }
   if (!peloton_id && !compania_id)
     return { error: "Se requiere un pelotón o una compañía como padre" }
   if (peloton_id && compania_id)
     return { error: "La escuadra no puede pertenecer a un pelotón y a una compañía a la vez" }
+  if (max_miembros !== undefined && (isNaN(max_miembros) || max_miembros < 1))
+    return { error: "El límite de miembros debe ser al menos 1" }
 
   // Calcular orden como el siguiente al último hermano
   let siblingsQuery = supabase.from("escuadras").select("orden").order("orden", { ascending: false }).limit(1)
@@ -247,7 +252,7 @@ export async function crearEscuadra(formData: FormData): Promise<ActionResult> {
 
   const { error } = await supabase
     .from("escuadras")
-    .insert({ nombre, peloton_id, compania_id, indicativo_radio, orden })
+    .insert({ nombre, peloton_id, compania_id, indicativo_radio, orden, ...(max_miembros !== undefined && { max_miembros }) })
   if (error) return { error: error.message }
   revalidatePath("/estructura")
   return { success: true }

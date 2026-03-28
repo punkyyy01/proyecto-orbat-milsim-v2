@@ -397,6 +397,61 @@ function InlineAddInput({
   )
 }
 
+// ─── Inline add escuadra (con nombre + max_miembros) ─────────────────────────
+
+function InlineAddEscuadraInput({
+  placeholder,
+  onAdd,
+  onCancel,
+}: {
+  placeholder: string
+  onAdd: (name: string, maxMiembros: number) => void
+  onCancel: () => void
+}) {
+  const [nombre, setNombre] = useState("")
+  const [max, setMax] = useState("6")
+
+  function handleSubmit() {
+    const n = nombre.trim()
+    const m = parseInt(max, 10)
+    if (!n) return
+    onAdd(n, isNaN(m) || m < 1 ? 6 : m)
+  }
+
+  return (
+    <div className="flex items-center gap-1.5 py-1 px-1 flex-wrap">
+      <input
+        autoFocus
+        placeholder={placeholder}
+        value={nombre}
+        onChange={(e) => setNombre(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") handleSubmit()
+          if (e.key === "Escape") onCancel()
+        }}
+        className="bg-slate-800 border border-blue-500/40 rounded px-2 py-1 text-slate-200 text-sm outline-none w-40 placeholder:text-slate-600"
+      />
+      <div className="flex items-center gap-1">
+        <span className="text-xs text-slate-500">máx.</span>
+        <input
+          type="number"
+          min={1}
+          value={max}
+          onChange={(e) => setMax(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") handleSubmit()
+            if (e.key === "Escape") onCancel()
+          }}
+          className="w-12 bg-slate-800 border border-blue-500/40 rounded px-1.5 py-1 text-slate-200 text-sm outline-none font-mono"
+        />
+      </div>
+      <button onClick={onCancel} className="text-slate-500 hover:text-slate-300">
+        <X className="w-3.5 h-3.5" />
+      </button>
+    </div>
+  )
+}
+
 // ─── Inline delete confirm ────────────────────────────────────────────────────
 
 function InlineDeleteConfirm({
@@ -518,7 +573,7 @@ export function ArbolEstructura({
 
   // ── Add ──────────────────────────────────────────────────────────────────────
 
-  function handleAdd(nombre: string) {
+  function handleAdd(nombre: string, maxMiembros?: number) {
     if (!addingTo) return
     const fd = new FormData()
     fd.set("nombre", nombre)
@@ -535,10 +590,12 @@ export function ArbolEstructura({
         result = await crearPeloton(fd)
       } else if (level === "esc") {
         fd.set("peloton_id", parentId)
+        if (maxMiembros) fd.set("max_miembros", String(maxMiembros))
         result = await crearEscuadra(fd)
       } else {
         // "esc-comp": escuadra directa bajo compañía (sin pelotón)
         fd.set("compania_id", parentId)
+        if (maxMiembros) fd.set("max_miembros", String(maxMiembros))
         result = await crearEscuadra(fd)
       }
       if ("error" in result) toast.error(result.error)
@@ -916,7 +973,7 @@ export function ArbolEstructura({
                               )}
                               {addingTo?.parentId === comp.id && addingTo.level === "esc-comp" && (
                                 <div className="ml-12 mt-0.5">
-                                  <InlineAddInput
+                                  <InlineAddEscuadraInput
                                     placeholder="Nombre de la escuadra directa…"
                                     onAdd={handleAdd}
                                     onCancel={() => setAddingTo(null)}
@@ -1150,7 +1207,7 @@ export function ArbolEstructura({
                                         <div>
                                           {addingTo?.parentId === pel.id && addingTo.level === "esc" && (
                                             <div className="ml-12 mt-0.5">
-                                              <InlineAddInput
+                                              <InlineAddEscuadraInput
                                                 placeholder="Nombre de la escuadra…"
                                                 onAdd={handleAdd}
                                                 onCancel={() => setAddingTo(null)}
