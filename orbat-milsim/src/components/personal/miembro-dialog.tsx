@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useMemo, useRef, useEffect } from "react"
 import { toast } from "sonner"
-import { Pencil, Plus, AlertTriangle, Loader2 } from "lucide-react"
+import { Pencil, Plus, AlertTriangle, Loader2, Star, Trash2, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -25,8 +25,19 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
+import { cn } from "@/lib/utils"
 import { RANKS_BY_CATEGORY } from "@/constants"
-import { crearMiembro, actualizarMiembro, checkNickExiste, getCursosCompletadosMiembro } from "@/app/actions/personal"
+import {
+  crearMiembro,
+  actualizarMiembro,
+  checkNickExiste,
+  getCursosCompletadosMiembro,
+  getAsignacionesMiembro,
+  agregarAsignacion,
+  eliminarAsignacion,
+  marcarAsignacionPrincipal,
+} from "@/app/actions/personal"
+import type { AsignacionConNombres } from "@/app/actions/personal"
 import type { MiembroRow, CursoRow } from "@/lib/types/database"
 import type { EstructuraRegimiento } from "@/lib/supabase/queries"
 
@@ -55,31 +66,368 @@ const ROLES_COMUNES = [
 
 // ─── Cascade helpers ──────────────────────────────────────────────────────────
 
-/** Dado un miembro, retorna los IDs de compañía, pelotón y escuadra */
-function detectCascadeIds(
-  m: MiembroRow | undefined,
-  estructura: EstructuraRegimiento[]
-): { companiaId: string; pelotonId: string; escuadraId: string } {
-  if (!m) return { companiaId: "", pelotonId: "", escuadraId: "" }
+function getAsignacionLabel(a: AsignacionConNombres): string {
+  if (a.escuadras) return a.escuadras.nombre
+  if (a.pelotones) return a.pelotones.nombre
+  if (a.companias) return a.companias.nombre
+  if (a.regimientos) return a.regimientos.nombre
+  return "Unidad desconocida"
+}
 
-  for (const reg of estructura) {
-    for (const comp of reg.companias) {
-      if (m.compania_id === comp.id && !m.peloton_id && !m.escuadra_id) {
-        return { companiaId: comp.id, pelotonId: "", escuadraId: "" }
-      }
-      for (const pel of comp.pelotones) {
-        if (m.peloton_id === pel.id && !m.escuadra_id) {
-          return { companiaId: comp.id, pelotonId: pel.id, escuadraId: "" }
-        }
-        for (const esc of pel.escuadras) {
-          if (m.escuadra_id === esc.id) {
-            return { companiaId: comp.id, pelotonId: pel.id, escuadraId: esc.id }
-          }
-        }
-      }
-    }
+// ─── CascadePicker ────────────────────────────────────────────────────────────
+
+interface CascadePickerProps {
+  estructura: EstructuraRegimiento[]
+  escuadraConteos?: Record<string, number>
+  inputClass: string
+  labelClass: string
+  /** initial values */
+  initialCompaniaId?: string
+  initialPelotonId?: string
+  initialEscuadraId?: string
+  onChange?: (nivel: string, unidadId: string) => void
+  /** controlled values */
+  companiaId: string
+  pelotonId: string
+  escuadraId: string
+  setCompaniaId: (v: string) => void
+  setPelotonId: (v: string) => void
+  setEscuadraId: (v: string) => void
+}
+
+function CascadePicker({
+  estructura,
+  escuadraConteos = {},
+  inputClass,
+  labelClass,
+  companiaId,
+  pelotonId,
+  escuadraId,
+  setCompaniaId,
+  setPelotonId,
+  setEscuadraId,
+}: CascadePickerProps) {
+  const todasCompanias = useMemo(() => estructura.flatMap((r) => r.companias), [estructura])
+  const compSeleccionada = todasCompanias.find((c) => c.id === companiaId)
+  const pelotones = compSeleccionada?.pelotones ?? []
+  const pelSeleccionado = pelotones.find((p) => p.id === pelotonId)
+  const escuadrasDePeloton = pelSeleccionado?.escuadras ?? []
+  const escuadrasDirectas = compSeleccionada?.escuadras_directas ?? []
+
+  function handleCompaniaChange(val: string) {
+    setCompaniaId(val)
+    setPelotonId("")
+    setEscuadraId("")
   }
-  return { companiaId: "", pelotonId: "", escuadraId: "" }
+  function handlePelotonChange(val: string) {
+    setPelotonId(val)
+    setEscuadraId("")
+  }
+
+  return (
+    <>
+      {/* Compañía */}
+      <div className="space-y-1.5">
+        <Label className={labelClass}>Compañía</Label>
+        <Select value={companiaId || "__none__"} onValueChange={(v) => handleCompaniaChange(v === "__none__" ? "" : v)}>
+          <SelectTrigger className={`${inputClass} focus:ring-0`}>
+            <SelectValue placeholder="Sin asignar" />
+          </SelectTrigger>
+          <SelectContent className="border" style={{ background: "#0f172a", borderColor: "rgba(255,255,255,0.1)" }}>
+            <SelectItem value="__none__" className="text-slate-400">Sin asignar</SelectItem>
+            {todasCompanias.map((c) => (
+              <SelectItem key={c.id} value={c.id} className="text-slate-200">{c.nombre}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Pelotón */}
+      {companiaId && pelotones.length > 0 && (
+        <div className="space-y-1.5">
+          <Label className={labelClass}>Pelotón</Label>
+          <Select value={pelotonId || "__comp__"} onValueChange={(v) => handlePelotonChange(v === "__comp__" ? "" : v)}>
+            <SelectTrigger className={`${inputClass} focus:ring-0`}><SelectValue /></SelectTrigger>
+            <SelectContent className="border" style={{ background: "#0f172a", borderColor: "rgba(255,255,255,0.1)" }}>
+              <SelectItem value="__comp__" className="text-slate-400">
+                Asignar a {compSeleccionada?.nombre} directamente
+              </SelectItem>
+              {pelotones.map((p) => (
+                <SelectItem key={p.id} value={p.id} className="text-slate-200">{p.nombre}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
+      {/* Escuadras directas de compañía (si no hay pelotón seleccionado) */}
+      {companiaId && !pelotonId && escuadrasDirectas.length > 0 && (
+        <div className="space-y-1.5">
+          <Label className={labelClass}>Escuadra directa</Label>
+          <Select value={escuadraId || "__comp__"} onValueChange={(v) => setEscuadraId(v === "__comp__" ? "" : v)}>
+            <SelectTrigger className={`${inputClass} focus:ring-0`}><SelectValue /></SelectTrigger>
+            <SelectContent className="border" style={{ background: "#0f172a", borderColor: "rgba(255,255,255,0.1)" }}>
+              <SelectItem value="__comp__" className="text-slate-400">
+                Asignar a {compSeleccionada?.nombre} directamente
+              </SelectItem>
+              {escuadrasDirectas.map((e) => {
+                const ocupados = escuadraConteos[e.id] ?? 0
+                const libre = e.max_miembros - ocupados
+                const llena = libre <= 0
+                return (
+                  <SelectItem key={e.id} value={e.id} className="text-slate-200">
+                    <span className="flex items-center gap-2">
+                      <span>{e.nombre}</span>
+                      <span className={`text-[11px] font-mono ${llena ? "text-red-400" : "text-slate-500"}`}>
+                        {ocupados}/{e.max_miembros}
+                        {llena ? " · llena" : libre === 1 ? " · 1 libre" : ` · ${libre} libres`}
+                      </span>
+                    </span>
+                  </SelectItem>
+                )
+              })}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
+      {/* Escuadra (de pelotón) */}
+      {pelotonId && escuadrasDePeloton.length > 0 && (
+        <div className="space-y-1.5">
+          <Label className={labelClass}>Escuadra</Label>
+          <Select value={escuadraId || "__plt__"} onValueChange={(v) => setEscuadraId(v === "__plt__" ? "" : v)}>
+            <SelectTrigger className={`${inputClass} focus:ring-0`}><SelectValue /></SelectTrigger>
+            <SelectContent className="border" style={{ background: "#0f172a", borderColor: "rgba(255,255,255,0.1)" }}>
+              <SelectItem value="__plt__" className="text-slate-400">
+                Asignar a {pelSeleccionado?.nombre} directamente
+              </SelectItem>
+              {escuadrasDePeloton.map((e) => {
+                const ocupados = escuadraConteos[e.id] ?? 0
+                const libre = e.max_miembros - ocupados
+                const llena = libre <= 0
+                return (
+                  <SelectItem key={e.id} value={e.id} className="text-slate-200">
+                    <span className="flex items-center gap-2">
+                      <span>{e.nombre}</span>
+                      <span className={`text-[11px] font-mono ${llena ? "text-red-400" : "text-slate-500"}`}>
+                        {ocupados}/{e.max_miembros}
+                        {llena ? " · llena" : libre === 1 ? " · 1 libre" : ` · ${libre} libres`}
+                      </span>
+                    </span>
+                  </SelectItem>
+                )
+              })}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
+      {companiaId && pelotones.length === 0 && escuadrasDirectas.length === 0 && (
+        <p className="text-xs text-amber-400/80">Esta compañía no tiene pelotones ni escuadras registradas aún.</p>
+      )}
+      {pelotonId && escuadrasDePeloton.length === 0 && (
+        <p className="text-xs text-amber-400/80">Este pelotón no tiene escuadras registradas aún.</p>
+      )}
+    </>
+  )
+}
+
+// ─── AsignacionesSection ──────────────────────────────────────────────────────
+
+interface AsignacionesSectionProps {
+  miembroId: string
+  asignaciones: AsignacionConNombres[]
+  setAsignaciones: (a: AsignacionConNombres[]) => void
+  estructura: EstructuraRegimiento[]
+  escuadraConteos?: Record<string, number>
+  inputClass: string
+  labelClass: string
+}
+
+function AsignacionesSection({
+  miembroId,
+  asignaciones,
+  setAsignaciones,
+  estructura,
+  escuadraConteos,
+  inputClass,
+  labelClass,
+}: AsignacionesSectionProps) {
+  const [addOpen, setAddOpen] = useState(false)
+  const [addCompaniaId, setAddCompaniaId] = useState("")
+  const [addPelotonId, setAddPelotonId] = useState("")
+  const [addEscuadraId, setAddEscuadraId] = useState("")
+  const [pending, startTransition] = useTransition()
+
+  function handleDelete(asignacionId: string) {
+    startTransition(async () => {
+      const result = await eliminarAsignacion(asignacionId)
+      if ("error" in result) {
+        toast.error(result.error)
+      } else {
+        setAsignaciones(asignaciones.filter((a) => a.id !== asignacionId))
+        toast.success("Asignación eliminada")
+      }
+    })
+  }
+
+  function handleMarkPrincipal(asignacionId: string) {
+    startTransition(async () => {
+      const result = await marcarAsignacionPrincipal(asignacionId, miembroId)
+      if ("error" in result) {
+        toast.error(result.error)
+      } else {
+        setAsignaciones(
+          asignaciones.map((a) => ({ ...a, es_principal: a.id === asignacionId }))
+        )
+        toast.success("Asignación principal actualizada")
+      }
+    })
+  }
+
+  function handleAdd() {
+    let nivel = ""
+    let unidadId = ""
+    if (addEscuadraId) { nivel = "escuadra"; unidadId = addEscuadraId }
+    else if (addPelotonId) { nivel = "peloton"; unidadId = addPelotonId }
+    else if (addCompaniaId) { nivel = "compania"; unidadId = addCompaniaId }
+    if (!nivel || !unidadId) { toast.error("Selecciona una unidad"); return }
+
+    const fd = new FormData()
+    fd.set("nivel", nivel)
+    fd.set("unidad_id", unidadId)
+
+    startTransition(async () => {
+      const result = await agregarAsignacion(miembroId, fd)
+      if ("error" in result) {
+        toast.error(result.error)
+      } else {
+        // Refetch asignaciones
+        const updated = await getAsignacionesMiembro(miembroId)
+        setAsignaciones(updated)
+        setAddOpen(false)
+        setAddCompaniaId("")
+        setAddPelotonId("")
+        setAddEscuadraId("")
+        toast.success("Asignación agregada")
+      }
+    })
+  }
+
+  return (
+    <div className="space-y-3">
+      {asignaciones.length === 0 ? (
+        <p className="text-xs text-slate-500 italic">Sin asignaciones de unidad.</p>
+      ) : (
+        <div className="space-y-1.5">
+          {asignaciones.map((a) => (
+            <div
+              key={a.id}
+              className={cn(
+                "flex items-center justify-between gap-2 px-3 py-2 rounded-lg border text-sm",
+                a.es_principal
+                  ? "border-blue-500/30 bg-blue-500/5"
+                  : "border-white/6 bg-white/[0.02]"
+              )}
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                {a.es_principal && (
+                  <Star className="w-3 h-3 text-blue-400 shrink-0 fill-blue-400" />
+                )}
+                <span className={a.es_principal ? "text-slate-200" : "text-slate-400"}>
+                  {getAsignacionLabel(a)}
+                </span>
+                {a.es_principal && (
+                  <span className="text-[10px] font-mono text-blue-400 border border-blue-500/30 rounded px-1">
+                    principal
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-0.5 shrink-0">
+                {!a.es_principal && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => handleMarkPrincipal(a.id)}
+                    disabled={pending}
+                    title="Marcar como principal"
+                    className="w-6 h-6 text-slate-500 hover:text-blue-400 hover:bg-blue-500/10"
+                  >
+                    <Star className="w-3 h-3" />
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => handleDelete(a.id)}
+                  disabled={pending}
+                  title="Eliminar asignación"
+                  className="w-6 h-6 text-slate-500 hover:text-red-400 hover:bg-red-500/10"
+                >
+                  <X className="w-3 h-3" />
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Add form */}
+      {addOpen ? (
+        <div
+          className="space-y-3 p-3 rounded-lg border"
+          style={{ borderColor: "rgba(255,255,255,0.08)", background: "rgba(0,0,0,0.2)" }}
+        >
+          <p className="text-xs font-semibold text-slate-400">Agregar asignación</p>
+          <CascadePicker
+            estructura={estructura}
+            escuadraConteos={escuadraConteos}
+            inputClass={inputClass}
+            labelClass={labelClass}
+            companiaId={addCompaniaId}
+            pelotonId={addPelotonId}
+            escuadraId={addEscuadraId}
+            setCompaniaId={setAddCompaniaId}
+            setPelotonId={setAddPelotonId}
+            setEscuadraId={setAddEscuadraId}
+          />
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              size="sm"
+              onClick={handleAdd}
+              disabled={pending || (!addCompaniaId && !addPelotonId && !addEscuadraId)}
+              className="bg-blue-600 hover:bg-blue-500 text-white text-xs h-7"
+            >
+              {pending ? <Loader2 className="w-3 h-3 animate-spin" /> : "Agregar"}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => { setAddOpen(false); setAddCompaniaId(""); setAddPelotonId(""); setAddEscuadraId("") }}
+              className="text-slate-400 hover:text-slate-200 hover:bg-white/5 text-xs h-7"
+            >
+              Cancelar
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={() => setAddOpen(true)}
+          className="text-slate-400 hover:text-blue-400 hover:bg-blue-500/10 text-xs h-7 gap-1.5"
+        >
+          <Plus className="w-3 h-3" />
+          Agregar asignación
+        </Button>
+      )}
+    </div>
+  )
 }
 
 // ─── Form ────────────────────────────────────────────────────────────────────
@@ -87,9 +435,9 @@ function detectCascadeIds(
 interface FormProps {
   miembro?: MiembroRow
   cursosCompletados?: string[]
+  asignacionesIniciales?: AsignacionConNombres[]
   estructura: EstructuraRegimiento[]
   cursos: CursoRow[]
-  /** Conteo de miembros activos por escuadra_id */
   escuadraConteos?: Record<string, number>
   onClose: () => void
 }
@@ -97,6 +445,7 @@ interface FormProps {
 function MiembroForm({
   miembro,
   cursosCompletados = [],
+  asignacionesIniciales = [],
   estructura,
   cursos,
   escuadraConteos = {},
@@ -107,15 +456,9 @@ function MiembroForm({
   const submitModeRef = useRef<"close" | "another">("close")
 
   // ── Identidad ────────────────────────────────────────────────────────────────
-  const [nombre, setNombre] = useState(
-    miembro !== undefined ? miembro.nombre_milsim : ""
-  )
-  const [rango, setRango] = useState<string>(
-    miembro !== undefined ? miembro.rango : "PVT"
-  )
-  const [rol, setRol] = useState<string>(
-    miembro !== undefined ? (miembro.rol ?? "") : "Fusilero"
-  )
+  const [nombre, setNombre] = useState(miembro !== undefined ? miembro.nombre_milsim : "")
+  const [rango, setRango] = useState<string>(miembro !== undefined ? miembro.rango : "PVT")
+  const [rol, setRol] = useState<string>(miembro !== undefined ? (miembro.rol ?? "") : "Fusilero")
   const [discordId, setDiscordId] = useState(miembro?.discord_id ?? "")
   const [steamId, setSteamId] = useState(miembro?.steam_id ?? "")
   const [activo, setActivo] = useState(miembro?.activo ?? true)
@@ -130,7 +473,6 @@ function MiembroForm({
     setNombre(value)
     clearTimeout(nickCheckTimerRef.current)
     const trimmed = value.trim()
-    // No check needed if empty or same as current member's nick
     if (!trimmed || trimmed.toLowerCase() === miembro?.nombre_milsim.toLowerCase()) {
       setNickExists(false)
       setCheckingNick(false)
@@ -144,39 +486,17 @@ function MiembroForm({
     }, 500)
   }
 
-  // Cleanup timer on unmount
   useEffect(() => {
     return () => clearTimeout(nickCheckTimerRef.current)
   }, [])
 
-  // ── Cascade assignment ───────────────────────────────────────────────────────
-  const initialCascade = useMemo(
-    () => detectCascadeIds(miembro, estructura),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    []
-  )
-  const [companiaId, setCompaniaId] = useState(initialCascade.companiaId)
-  const [pelotonId, setPelotonId] = useState(initialCascade.pelotonId)
-  const [escuadraId, setEscuadraId] = useState(initialCascade.escuadraId)
+  // ── Cascade (create mode only) ───────────────────────────────────────────────
+  const [companiaId, setCompaniaId] = useState("")
+  const [pelotonId, setPelotonId] = useState("")
+  const [escuadraId, setEscuadraId] = useState("")
 
-  function handleCompaniaChange(val: string) {
-    setCompaniaId(val)
-    setPelotonId("")
-    setEscuadraId("")
-  }
-  function handlePelotonChange(val: string) {
-    setPelotonId(val)
-    setEscuadraId("")
-  }
-
-  const todasCompanias = useMemo(
-    () => estructura.flatMap((r) => r.companias),
-    [estructura]
-  )
-  const compSeleccionada = todasCompanias.find((c) => c.id === companiaId)
-  const pelotones = compSeleccionada?.pelotones ?? []
-  const pelSeleccionado = pelotones.find((p) => p.id === pelotonId)
-  const escuadras = pelSeleccionado?.escuadras ?? []
+  // ── Asignaciones (edit mode) ─────────────────────────────────────────────────
+  const [asignaciones, setAsignaciones] = useState<AsignacionConNombres[]>(asignacionesIniciales)
 
   // ── Cursos ───────────────────────────────────────────────────────────────────
   const [cursosSeleccionados, setCursosSeleccionados] = useState<Set<string>>(
@@ -205,26 +525,11 @@ function MiembroForm({
     setCursosSeleccionados(new Set())
     setNickExists(false)
     setError(null)
-    // Keep cascade selection so admin can quickly add another to same unit
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
-
-    // Derive nivel + unidadId from cascade
-    let nivel = ""
-    let unidadId = ""
-    if (escuadraId) {
-      nivel = "escuadra"
-      unidadId = escuadraId
-    } else if (pelotonId) {
-      nivel = "peloton"
-      unidadId = pelotonId
-    } else if (companiaId) {
-      nivel = "compania"
-      unidadId = companiaId
-    }
 
     const fd = new FormData()
     fd.set("nombre_milsim", nombre)
@@ -234,9 +539,18 @@ function MiembroForm({
     fd.set("steam_id", steamId)
     fd.set("activo", String(activo))
     fd.set("notas_admin", notas)
-    fd.set("nivel", nivel)
-    fd.set("unidad_id", unidadId)
     fd.set("cursos", Array.from(cursosSeleccionados).join(","))
+
+    // Create mode: include cascade assignment
+    if (!isEdit) {
+      let nivel = ""
+      let unidadId = ""
+      if (escuadraId) { nivel = "escuadra"; unidadId = escuadraId }
+      else if (pelotonId) { nivel = "peloton"; unidadId = pelotonId }
+      else if (companiaId) { nivel = "compania"; unidadId = companiaId }
+      fd.set("nivel", nivel)
+      fd.set("unidad_id", unidadId)
+    }
 
     const keepOpen = submitModeRef.current === "another"
 
@@ -271,7 +585,6 @@ function MiembroForm({
       <div className="space-y-4">
         <p className={sectionClass}>Identidad</p>
 
-        {/* Nick milsim */}
         <div className="space-y-1.5">
           <Label htmlFor="nombre_milsim" className={labelClass}>
             Nick milsim <span className="text-red-400">*</span>
@@ -297,11 +610,8 @@ function MiembroForm({
           )}
         </div>
 
-        {/* Rango */}
         <div className="space-y-1.5">
-          <Label className={labelClass}>
-            Rango <span className="text-red-400">*</span>
-          </Label>
+          <Label className={labelClass}>Rango <span className="text-red-400">*</span></Label>
           <Select value={rango} onValueChange={setRango} required>
             <SelectTrigger className={`${inputClass} focus:ring-0`}>
               <SelectValue placeholder="Seleccionar rango…" />
@@ -327,11 +637,8 @@ function MiembroForm({
           </Select>
         </div>
 
-        {/* Rol */}
         <div className="space-y-1.5">
-          <Label htmlFor="rol" className={labelClass}>
-            Rol / Especialidad
-          </Label>
+          <Label htmlFor="rol" className={labelClass}>Rol / Especialidad</Label>
           <Input
             id="rol"
             list="rol-suggestions"
@@ -341,9 +648,7 @@ function MiembroForm({
             className={inputClass}
           />
           <datalist id="rol-suggestions">
-            {ROLES_COMUNES.map((r) => (
-              <option key={r} value={r} />
-            ))}
+            {ROLES_COMUNES.map((r) => <option key={r} value={r} />)}
           </datalist>
         </div>
       </div>
@@ -379,95 +684,33 @@ function MiembroForm({
 
       <Separator style={{ background: "rgba(255,255,255,0.06)" }} />
 
-      {/* ── Asignación (cascada) ────────────────────────────────────────────── */}
+      {/* ── Asignación ─────────────────────────────────────────────────────── */}
       <div className="space-y-4">
         <p className={sectionClass}>Asignación de unidad</p>
 
-        {/* Compañía */}
-        <div className="space-y-1.5">
-          <Label className={labelClass}>Compañía</Label>
-          <Select value={companiaId || "__none__"} onValueChange={(v) => handleCompaniaChange(v === "__none__" ? "" : v)}>
-            <SelectTrigger className={`${inputClass} focus:ring-0`}>
-              <SelectValue placeholder="Sin asignar" />
-            </SelectTrigger>
-            <SelectContent className="border" style={{ background: "#0f172a", borderColor: "rgba(255,255,255,0.1)" }}>
-              <SelectItem value="__none__" className="text-slate-400">
-                Sin asignar
-              </SelectItem>
-              {todasCompanias.map((c) => (
-                <SelectItem key={c.id} value={c.id} className="text-slate-200">
-                  {c.nombre}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Pelotón (solo si hay compañía seleccionada) */}
-        {companiaId && pelotones.length > 0 && (
-          <div className="space-y-1.5">
-            <Label className={labelClass}>Pelotón</Label>
-            <Select value={pelotonId || "__comp__"} onValueChange={(v) => handlePelotonChange(v === "__comp__" ? "" : v)}>
-              <SelectTrigger className={`${inputClass} focus:ring-0`}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="border" style={{ background: "#0f172a", borderColor: "rgba(255,255,255,0.1)" }}>
-                <SelectItem value="__comp__" className="text-slate-400">
-                  Asignar a {compSeleccionada?.nombre} directamente
-                </SelectItem>
-                {pelotones.map((p) => (
-                  <SelectItem key={p.id} value={p.id} className="text-slate-200">
-                    {p.nombre}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
-
-        {/* Escuadra (solo si hay pelotón seleccionado) */}
-        {pelotonId && escuadras.length > 0 && (
-          <div className="space-y-1.5">
-            <Label className={labelClass}>Escuadra</Label>
-            <Select value={escuadraId || "__plt__"} onValueChange={(v) => setEscuadraId(v === "__plt__" ? "" : v)}>
-              <SelectTrigger className={`${inputClass} focus:ring-0`}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="border" style={{ background: "#0f172a", borderColor: "rgba(255,255,255,0.1)" }}>
-                <SelectItem value="__plt__" className="text-slate-400">
-                  Asignar a {pelSeleccionado?.nombre} directamente
-                </SelectItem>
-                {escuadras.map((e) => {
-                  const ocupados = escuadraConteos[e.id] ?? 0
-                  const libre = e.max_miembros - ocupados
-                  const llena = libre <= 0
-                  return (
-                    <SelectItem key={e.id} value={e.id} className="text-slate-200">
-                      <span className="flex items-center gap-2">
-                        <span>{e.nombre}</span>
-                        <span className={`text-[11px] font-mono ${llena ? "text-red-400" : "text-slate-500"}`}>
-                          {ocupados}/{e.max_miembros}
-                          {llena ? " · llena" : libre === 1 ? " · 1 libre" : ` · ${libre} libres`}
-                        </span>
-                      </span>
-                    </SelectItem>
-                  )
-                })}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
-
-        {/* Warning: sin unidades */}
-        {companiaId && pelotones.length === 0 && (
-          <p className="text-xs text-amber-400/80">
-            Esta compañía no tiene pelotones registrados aún.
-          </p>
-        )}
-        {pelotonId && escuadras.length === 0 && (
-          <p className="text-xs text-amber-400/80">
-            Este pelotón no tiene escuadras registradas aún.
-          </p>
+        {isEdit ? (
+          <AsignacionesSection
+            miembroId={miembro!.id}
+            asignaciones={asignaciones}
+            setAsignaciones={setAsignaciones}
+            estructura={estructura}
+            escuadraConteos={escuadraConteos}
+            inputClass={inputClass}
+            labelClass={labelClass}
+          />
+        ) : (
+          <CascadePicker
+            estructura={estructura}
+            escuadraConteos={escuadraConteos}
+            inputClass={inputClass}
+            labelClass={labelClass}
+            companiaId={companiaId}
+            pelotonId={pelotonId}
+            escuadraId={escuadraId}
+            setCompaniaId={setCompaniaId}
+            setPelotonId={setPelotonId}
+            setEscuadraId={setEscuadraId}
+          />
         )}
       </div>
 
@@ -585,28 +828,37 @@ export function MiembroDialog({
   miembro,
   estructura,
   cursos,
-  cursosCompletados,
   escuadraConteos,
 }: DialogProps) {
   const [open, setOpen] = useState(false)
-  // null = not yet loaded; string[] = ready to render form
   const [cursosIniciales, setCursosIniciales] = useState<string[] | null>(
+    mode === "create" ? [] : null
+  )
+  const [asignacionesIniciales, setAsignacionesIniciales] = useState<AsignacionConNombres[] | null>(
     mode === "create" ? [] : null
   )
 
   async function handleOpenChange(next: boolean) {
     if (!next) {
       setOpen(false)
-      // Reset so next open refetches
-      if (mode === "edit") setCursosIniciales(null)
+      if (mode === "edit") {
+        setCursosIniciales(null)
+        setAsignacionesIniciales(null)
+      }
       return
     }
     setOpen(true)
     if (mode === "edit" && miembro) {
-      const ids = await getCursosCompletadosMiembro(miembro.id)
+      const [ids, asigns] = await Promise.all([
+        getCursosCompletadosMiembro(miembro.id),
+        getAsignacionesMiembro(miembro.id),
+      ])
       setCursosIniciales(ids)
+      setAsignacionesIniciales(asigns)
     }
   }
+
+  const loaded = cursosIniciales !== null && asignacionesIniciales !== null
 
   return (
     <Sheet open={open} onOpenChange={handleOpenChange}>
@@ -639,10 +891,11 @@ export function MiembroDialog({
           </SheetTitle>
         </SheetHeader>
 
-        {cursosIniciales !== null ? (
+        {loaded ? (
           <MiembroForm
             miembro={miembro}
-            cursosCompletados={cursosIniciales}
+            cursosCompletados={cursosIniciales!}
+            asignacionesIniciales={asignacionesIniciales!}
             estructura={estructura}
             cursos={cursos}
             escuadraConteos={escuadraConteos}

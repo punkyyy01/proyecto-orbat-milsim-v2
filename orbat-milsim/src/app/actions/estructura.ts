@@ -272,6 +272,21 @@ export async function actualizarEscuadra(
   return { success: true }
 }
 
+export async function actualizarMaxMiembrosEscuadra(
+  id: string,
+  max_miembros: number
+): Promise<ActionResult> {
+  if (max_miembros < 1) return { error: "El límite debe ser al menos 1" }
+  const supabase = await createClient()
+  const { error } = await supabase
+    .from("escuadras")
+    .update({ max_miembros })
+    .eq("id", id)
+  if (error) return { error: error.message }
+  revalidatePath("/estructura")
+  return { success: true }
+}
+
 export async function actualizarIndicativoEscuadra(
   id: string,
   indicativo_radio: string | null

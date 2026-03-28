@@ -30,6 +30,7 @@ import {
   crearEscuadra,
   actualizarEscuadra,
   eliminarEscuadra,
+  actualizarMaxMiembrosEscuadra,
   actualizarIndicativoEscuadra,
   swapOrdenCompanias,
   swapOrdenPelotones,
@@ -243,6 +244,79 @@ function IndicativoInline({
     >
       <Radio className="w-2.5 h-2.5 shrink-0" />
       <span className="italic">radio</span>
+    </button>
+  )
+}
+
+// ─── Inline max_miembros editor ──────────────────────────────────────────────
+
+function MaxMiembrosInline({
+  escuadraId,
+  max,
+  current,
+}: {
+  escuadraId: string
+  max: number
+  current: number
+}) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(String(max))
+  const [pending, startT] = useTransition()
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  function handleSave() {
+    const val = parseInt(draft, 10)
+    if (isNaN(val) || val < 1) { setDraft(String(max)); setEditing(false); return }
+    startT(async () => {
+      const result = await actualizarMaxMiembrosEscuadra(escuadraId, val)
+      if ("error" in result) toast.error(result.error)
+      else setEditing(false)
+    })
+  }
+
+  const isFull = current >= max
+  const isAlmost = !isFull && current >= max - 1
+  const badgeCls = isFull
+    ? "bg-green-500/15 text-green-400 border-green-500/25"
+    : isAlmost
+      ? "bg-yellow-500/15 text-yellow-400 border-yellow-500/25"
+      : "bg-white/5 text-slate-500 border-white/8"
+
+  if (editing) {
+    return (
+      <span className="flex items-center gap-1">
+        <input
+          ref={inputRef}
+          autoFocus
+          type="number"
+          min={1}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") handleSave()
+            if (e.key === "Escape") { setDraft(String(max)); setEditing(false) }
+          }}
+          onBlur={handleSave}
+          disabled={pending}
+          className="w-12 text-[10px] bg-slate-800 border border-blue-500/40 rounded px-1.5 py-0.5 text-slate-200 outline-none font-mono"
+        />
+        <button onClick={handleSave} disabled={pending} className="text-green-400 hover:text-green-300">
+          <Check className="w-2.5 h-2.5" />
+        </button>
+        <button onClick={() => { setDraft(String(max)); setEditing(false) }} className="text-slate-500 hover:text-slate-400">
+          <X className="w-2.5 h-2.5" />
+        </button>
+      </span>
+    )
+  }
+
+  return (
+    <button
+      onClick={() => { setDraft(String(max)); setEditing(true) }}
+      title="Editar límite de miembros"
+      className={`text-[10px] font-mono px-1.5 py-0.5 rounded border transition-colors hover:opacity-80 ${badgeCls}`}
+    >
+      {current}/{max}
     </button>
   )
 }
@@ -917,7 +991,7 @@ export function ArbolEstructura({
                                                   className="text-slate-400 text-sm"
                                                 />
                                                 <IndicativoInline escuadraId={esc.id} valor={esc.indicativo_radio} />
-                                                <FillBadge current={esc.total_miembros} max={esc.max_miembros} />
+                                                <MaxMiembrosInline escuadraId={esc.id} max={esc.max_miembros} current={esc.total_miembros} />
                                               </div>
                                             )}
                                           </div>
@@ -1172,9 +1246,10 @@ export function ArbolEstructura({
                                                             escuadraId={esc.id}
                                                             valor={esc.indicativo_radio}
                                                           />
-                                                          <FillBadge
-                                                            current={esc.total_miembros}
+                                                          <MaxMiembrosInline
+                                                            escuadraId={esc.id}
                                                             max={esc.max_miembros}
+                                                            current={esc.total_miembros}
                                                           />
                                                         </div>
                                                       )}

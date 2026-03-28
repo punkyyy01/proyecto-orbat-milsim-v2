@@ -5,6 +5,57 @@ import { createClient } from "@/lib/supabase/server"
 
 export type ActionResult = { error: string } | { success: true }
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/** Encuentra la asignación principal de tipo escuadra de un miembro. */
+async function getPrincipalEscuadraAsignacion(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  miembroId: string
+) {
+  return supabase
+    .from("asignaciones")
+    .select("id, escuadra_id")
+    .eq("miembro_id", miembroId)
+    .not("escuadra_id", "is", null)
+    .eq("es_principal", true)
+    .limit(1)
+    .maybeSingle()
+}
+
+/** Mueve la asignación principal de escuadra de un miembro a otra escuadra.
+ *  Si no tiene asignación escuadra-principal, la crea (marcando las otras como no-principal).
+ */
+async function moverAEscuadra(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  miembroId: string,
+  targetEscuadraId: string
+): Promise<{ error: string } | { success: true }> {
+  const { data: existing, error: findError } = await getPrincipalEscuadraAsignacion(supabase, miembroId)
+  if (findError) return { error: findError.message }
+
+  if (existing) {
+    const { error } = await supabase
+      .from("asignaciones")
+      .update({ escuadra_id: targetEscuadraId })
+      .eq("id", existing.id)
+    if (error) return { error: error.message }
+  } else {
+    // Marcar cualquier asignación principal actual como no-principal
+    await supabase
+      .from("asignaciones")
+      .update({ es_principal: false })
+      .eq("miembro_id", miembroId)
+      .eq("es_principal", true)
+    // Crear nueva asignación principal de escuadra
+    const { error } = await supabase
+      .from("asignaciones")
+      .insert({ miembro_id: miembroId, escuadra_id: targetEscuadraId, es_principal: true, orden: 0 })
+    if (error) return { error: error.message }
+  }
+
+  return { success: true }
+}
+
 // ─── Transferir miembro a otra escuadra ───────────────────────────────────────
 
 export async function transferirMiembro(
@@ -18,18 +69,14 @@ export async function transferirMiembro(
   // Verificar capacidad en paralelo
   const [escuadraRes, countRes] = await Promise.all([
     supabase.from("escuadras").select("max_miembros").eq("id", targetEscuadraId).single(),
-    supabase.from("miembros").select("*", { count: "exact", head: true }).eq("escuadra_id", targetEscuadraId),
+    supabase.from("asignaciones").select("*", { count: "exact", head: true }).eq("escuadra_id", targetEscuadraId),
   ])
 
   if (escuadraRes.error || !escuadraRes.data) return { error: "Escuadra no encontrada" }
   if ((countRes.count ?? 0) >= escuadraRes.data.max_miembros) return { error: "La escuadra está llena" }
 
-  const { error } = await supabase
-    .from("miembros")
-    .update({ escuadra_id: targetEscuadraId, peloton_id: null, compania_id: null, regimiento_id: null })
-    .eq("id", miembroId)
-
-  if (error) return { error: error.message }
+  const result = await moverAEscuadra(supabase, miembroId, targetEscuadraId)
+  if ("error" in result) return result
 
   revalidatePath("/tablero")
   return { success: true }
@@ -47,27 +94,25 @@ export async function intercambiarMiembros(
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: "No autorizado" }
 
-  // miembro1 va a escuadra2
-  const { error: err1 } = await supabase
-    .from("miembros")
-    .update({ escuadra_id: escuadra2Id, peloton_id: null, compania_id: null, regimiento_id: null })
-    .eq("id", miembro1Id)
+  // Encontrar asignaciones antes de modificar
+  const [asign1, asign2] = await Promise.all([
+    getPrincipalEscuadraAsignacion(supabase, miembro1Id),
+    getPrincipalEscuadraAsignacion(supabase, miembro2Id),
+  ])
 
-  if (err1) return { error: err1.message }
+  if (asign1.error) return { error: asign1.error.message }
+  if (asign2.error) return { error: asign2.error.message }
 
-  // miembro2 va a escuadra1
-  const { error: err2 } = await supabase
-    .from("miembros")
-    .update({ escuadra_id: escuadra1Id, peloton_id: null, compania_id: null, regimiento_id: null })
-    .eq("id", miembro2Id)
+  // miembro1 → escuadra2
+  const r1 = await moverAEscuadra(supabase, miembro1Id, escuadra2Id)
+  if ("error" in r1) return r1
 
-  if (err2) {
+  // miembro2 → escuadra1
+  const r2 = await moverAEscuadra(supabase, miembro2Id, escuadra1Id)
+  if ("error" in r2) {
     // Revertir miembro1
-    await supabase
-      .from("miembros")
-      .update({ escuadra_id: escuadra1Id, peloton_id: null, compania_id: null, regimiento_id: null })
-      .eq("id", miembro1Id)
-    return { error: err2.message }
+    await moverAEscuadra(supabase, miembro1Id, escuadra1Id)
+    return r2
   }
 
   revalidatePath("/tablero")

@@ -213,17 +213,83 @@ export interface Database {
         Relationships: [];
       };
 
+      asignaciones: {
+        Row: {
+          id: string;
+          miembro_id: string;
+          regimiento_id: string | null;
+          compania_id: string | null;
+          peloton_id: string | null;
+          escuadra_id: string | null;
+          es_principal: boolean;
+          rol_en_unidad: string | null;
+          orden: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          miembro_id: string;
+          regimiento_id?: string | null;
+          compania_id?: string | null;
+          peloton_id?: string | null;
+          escuadra_id?: string | null;
+          es_principal?: boolean;
+          rol_en_unidad?: string | null;
+          orden?: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          miembro_id?: string;
+          regimiento_id?: string | null;
+          compania_id?: string | null;
+          peloton_id?: string | null;
+          escuadra_id?: string | null;
+          es_principal?: boolean;
+          rol_en_unidad?: string | null;
+          orden?: number;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "asignaciones_miembro_id_fkey";
+            columns: ["miembro_id"];
+            referencedRelation: "miembros";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "asignaciones_escuadra_id_fkey";
+            columns: ["escuadra_id"];
+            referencedRelation: "escuadras";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "asignaciones_peloton_id_fkey";
+            columns: ["peloton_id"];
+            referencedRelation: "pelotones";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "asignaciones_compania_id_fkey";
+            columns: ["compania_id"];
+            referencedRelation: "companias";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "asignaciones_regimiento_id_fkey";
+            columns: ["regimiento_id"];
+            referencedRelation: "regimientos";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+
       miembros: {
         Row: {
           id: string;
           nombre_milsim: string;
           rango: RangoMilitar;
           rol: string | null;
-          /** Solo uno de los cuatro FKs de unidad puede ser non-null */
-          regimiento_id: string | null;
-          compania_id: string | null;
-          peloton_id: string | null;
-          escuadra_id: string | null;
           activo: boolean;
           fecha_ingreso: string | null;
           discord_id: string | null;
@@ -237,10 +303,6 @@ export interface Database {
           nombre_milsim: string;
           rango: RangoMilitar;
           rol?: string | null;
-          regimiento_id?: string | null;
-          compania_id?: string | null;
-          peloton_id?: string | null;
-          escuadra_id?: string | null;
           activo?: boolean;
           fecha_ingreso?: string | null;
           discord_id?: string | null;
@@ -254,10 +316,6 @@ export interface Database {
           nombre_milsim?: string;
           rango?: RangoMilitar;
           rol?: string | null;
-          regimiento_id?: string | null;
-          compania_id?: string | null;
-          peloton_id?: string | null;
-          escuadra_id?: string | null;
           activo?: boolean;
           fecha_ingreso?: string | null;
           discord_id?: string | null;
@@ -266,32 +324,7 @@ export interface Database {
           created_at?: string;
           updated_at?: string;
         };
-        Relationships: [
-          {
-            foreignKeyName: "miembros_regimiento_id_fkey";
-            columns: ["regimiento_id"];
-            referencedRelation: "regimientos";
-            referencedColumns: ["id"];
-          },
-          {
-            foreignKeyName: "miembros_compania_id_fkey";
-            columns: ["compania_id"];
-            referencedRelation: "companias";
-            referencedColumns: ["id"];
-          },
-          {
-            foreignKeyName: "miembros_peloton_id_fkey";
-            columns: ["peloton_id"];
-            referencedRelation: "pelotones";
-            referencedColumns: ["id"];
-          },
-          {
-            foreignKeyName: "miembros_escuadra_id_fkey";
-            columns: ["escuadra_id"];
-            referencedRelation: "escuadras";
-            referencedColumns: ["id"];
-          },
-        ];
+        Relationships: [];
       };
 
       miembro_cursos: {
@@ -402,6 +435,9 @@ export interface Database {
           discord_id: string | null;
           steam_id: string | null;
           notas_admin: string | null;
+          // ── Asignación ───────────────────────────────────────────────────
+          asignacion_id: string;
+          es_principal: boolean;
           // ── Escuadra (null si el miembro está en un nivel superior) ─────
           escuadra_id: string | null;
           escuadra_nombre: string | null;
@@ -437,6 +473,7 @@ export interface Database {
           rango: RangoMilitar;
           rol: string | null;
           fecha_ingreso: string | null;
+          es_principal: boolean;
           escuadra_id: string | null;
           escuadra_nombre: string | null;
           escuadra_indicativo_radio: string | null;
@@ -502,6 +539,10 @@ export type MiembroCursoRow = PublicTables["miembro_cursos"]["Row"];
 export type MiembroCursoInsert = PublicTables["miembro_cursos"]["Insert"];
 
 export type AuditLogRow = PublicTables["audit_log"]["Row"];
+
+export type AsignacionRow = PublicTables["asignaciones"]["Row"];
+export type AsignacionInsert = PublicTables["asignaciones"]["Insert"];
+export type AsignacionUpdate = PublicTables["asignaciones"]["Update"];
 
 export type AppRoleRow = PublicTables["app_roles"]["Row"];
 export type AppRoleInsert = PublicTables["app_roles"]["Insert"];

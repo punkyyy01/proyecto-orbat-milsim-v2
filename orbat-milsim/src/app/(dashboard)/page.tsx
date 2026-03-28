@@ -46,21 +46,21 @@ export default async function DashboardHomePage() {
   ] = await Promise.all([
     // Total operadores activos
     supabase.from("miembros").select("*", { count: "exact", head: true }).eq("activo", true),
-    // Miembros activos con compania_id para el chart
-    supabase.from("miembros").select("compania_id, companias(nombre)").eq("activo", true).not("compania_id", "is", null),
+    // Asignaciones directas a compañía de miembros activos (para chart)
+    supabase.from("asignaciones").select("compania_id, companias(nombre), miembros!inner(activo)").not("compania_id", "is", null).eq("miembros.activo", true),
     // Últimos 5 cambios del audit_log
     supabase.from("audit_log").select("id, tabla, accion, created_at, datos_nuevos, datos_anteriores").order("created_at", { ascending: false }).limit(5),
     // Escuadras con su capacidad
     supabase.from("escuadras").select("id, nombre, max_miembros, pelotones(nombre, companias(nombre))"),
-    // Miembros activos con escuadra asignada
-    supabase.from("miembros").select("escuadra_id").eq("activo", true).not("escuadra_id", "is", null),
+    // Asignaciones activas a escuadras
+    supabase.from("asignaciones").select("escuadra_id, miembros!inner(activo)").not("escuadra_id", "is", null).eq("miembros.activo", true),
   ])
 
   // ── Operadores por compañía ────────────────────────────────────────────────
   type CompaniaRow = { compania_id: string | null; companias: { nombre: string } | null }
   const companiaMap = new Map<string, { nombre: string; count: number }>()
   for (const row of (miembrosConCompania ?? []) as CompaniaRow[]) {
-    if (!row.compania_id || !row.companias) continue
+    if (!row.compania_id || !row.companias?.nombre) continue
     const existing = companiaMap.get(row.compania_id)
     if (existing) {
       existing.count++
@@ -73,8 +73,8 @@ export default async function DashboardHomePage() {
 
   // ── Escuadras al límite ────────────────────────────────────────────────────
   const conteoPorEscuadra = new Map<string, number>()
-  for (const m of miembrosEnEscuadra ?? []) {
-    const id = (m as { escuadra_id: string }).escuadra_id
+  for (const a of miembrosEnEscuadra ?? []) {
+    const id = (a as { escuadra_id: string }).escuadra_id
     conteoPorEscuadra.set(id, (conteoPorEscuadra.get(id) ?? 0) + 1)
   }
 

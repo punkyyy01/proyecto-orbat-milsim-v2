@@ -63,24 +63,23 @@ function rankColor(rango: RangoMilitar): string {
 
 // ─── Count helpers ────────────────────────────────────────────────────────────
 
+/** Unique member count (deduplicates members with multiple assignments). */
 function countRegimiento(reg: OrbatRegimiento): number {
-  return (
-    reg.miembros_directos.length +
-    reg.companias.reduce(
-      (s, c) =>
-        s +
-        c.miembros_directos.length +
-        c.escuadras_directas.reduce((s2, e) => s2 + e.miembros.length, 0) +
-        c.pelotones.reduce(
-          (s2, p) =>
-            s2 +
-            p.miembros_directos.length +
-            p.escuadras.reduce((s3, e) => s3 + e.miembros.length, 0),
-          0
-        ),
-      0
-    )
-  );
+  const ids = new Set<string>();
+  for (const m of reg.miembros_directos) ids.add(m.miembro_id);
+  for (const comp of reg.companias) {
+    for (const m of comp.miembros_directos) ids.add(m.miembro_id);
+    for (const esc of comp.escuadras_directas) {
+      for (const m of esc.miembros) ids.add(m.miembro_id);
+    }
+    for (const plt of comp.pelotones) {
+      for (const m of plt.miembros_directos) ids.add(m.miembro_id);
+      for (const esc of plt.escuadras) {
+        for (const m of esc.miembros) ids.add(m.miembro_id);
+      }
+    }
+  }
+  return ids.size;
 }
 
 // ─── Tree primitives ─────────────────────────────────────────────────────────
@@ -136,6 +135,15 @@ function MiembroRow({ m }: { m: MiembroOrbat }) {
       {m.rol && (
         <span className="text-xs shrink-0 truncate" style={{ color: C.textDim }}>
           — {m.rol}
+        </span>
+      )}
+      {!m.es_principal && (
+        <span
+          className="text-[9px] font-mono shrink-0 border rounded px-1 py-px"
+          style={{ color: C.textDim, borderColor: C.connector }}
+          title="Asignación secundaria (adjunto)"
+        >
+          ATT
         </span>
       )}
     </div>

@@ -17,15 +17,14 @@ export const metadata: Metadata = { title: "Estructura" }
 async function getEstructuraConConteos(): Promise<RegimientoConConteo[]> {
   const supabase = await createClient()
 
-  const [estructura, miembrosResult] = await Promise.all([
+  const [estructura, asignacionesResult] = await Promise.all([
     getEstructura(),
     supabase
-      .from("miembros")
-      .select("regimiento_id, compania_id, peloton_id, escuadra_id, nombre_milsim, rango, rol")
-      .order("nombre_milsim"),
+      .from("asignaciones")
+      .select("regimiento_id, compania_id, peloton_id, escuadra_id, miembros(nombre_milsim, rango, rol)"),
   ])
 
-  const miembros = miembrosResult.data ?? []
+  const asignaciones = asignacionesResult.data ?? []
 
   // Build lookup maps: child_id → parent_id
   const escuadraToPeloton: Record<string, string> = {}
@@ -48,7 +47,7 @@ async function getEstructuraConConteos(): Promise<RegimientoConConteo[]> {
     }
   }
 
-  // Aggregate counts bottom-up
+  // Aggregate counts bottom-up (each asignacion = one slot)
   const porRegimiento: Record<string, number> = {}
   const porCompania: Record<string, number> = {}
   const porPeloton: Record<string, number> = {}
@@ -57,17 +56,20 @@ async function getEstructuraConConteos(): Promise<RegimientoConConteo[]> {
   // Member lists per escuadra for inline display
   const miembrosPorEscuadra: Record<string, MiembroInline[]> = {}
 
-  for (const m of miembros) {
-    if (m.escuadra_id) {
-      porEscuadra[m.escuadra_id] = (porEscuadra[m.escuadra_id] ?? 0) + 1
-      if (!miembrosPorEscuadra[m.escuadra_id]) miembrosPorEscuadra[m.escuadra_id] = []
-      miembrosPorEscuadra[m.escuadra_id].push({
-        nombre_milsim: m.nombre_milsim ?? "",
-        rango: m.rango ?? null,
-        rol: m.rol ?? null,
-      })
+  for (const a of asignaciones) {
+    const miembro = a.miembros as { nombre_milsim: string; rango: string | null; rol: string | null } | null
+    if (a.escuadra_id) {
+      porEscuadra[a.escuadra_id] = (porEscuadra[a.escuadra_id] ?? 0) + 1
+      if (miembro) {
+        if (!miembrosPorEscuadra[a.escuadra_id]) miembrosPorEscuadra[a.escuadra_id] = []
+        miembrosPorEscuadra[a.escuadra_id].push({
+          nombre_milsim: miembro.nombre_milsim ?? "",
+          rango: miembro.rango ?? null,
+          rol: miembro.rol ?? null,
+        })
+      }
       // Escuadra bajo pelotón
-      const pelId = escuadraToPeloton[m.escuadra_id]
+      const pelId = escuadraToPeloton[a.escuadra_id]
       if (pelId) {
         porPeloton[pelId] = (porPeloton[pelId] ?? 0) + 1
         const compId = pelotoneToCompania[pelId]
@@ -78,27 +80,27 @@ async function getEstructuraConConteos(): Promise<RegimientoConConteo[]> {
         }
       } else {
         // Escuadra directa bajo compañía
-        const compId = escuadraToCompania[m.escuadra_id]
+        const compId = escuadraToCompania[a.escuadra_id]
         if (compId) {
           porCompania[compId] = (porCompania[compId] ?? 0) + 1
           const regId = companiaToRegimiento[compId]
           if (regId) porRegimiento[regId] = (porRegimiento[regId] ?? 0) + 1
         }
       }
-    } else if (m.peloton_id) {
-      porPeloton[m.peloton_id] = (porPeloton[m.peloton_id] ?? 0) + 1
-      const compId = pelotoneToCompania[m.peloton_id]
+    } else if (a.peloton_id) {
+      porPeloton[a.peloton_id] = (porPeloton[a.peloton_id] ?? 0) + 1
+      const compId = pelotoneToCompania[a.peloton_id]
       if (compId) {
         porCompania[compId] = (porCompania[compId] ?? 0) + 1
         const regId = companiaToRegimiento[compId]
         if (regId) porRegimiento[regId] = (porRegimiento[regId] ?? 0) + 1
       }
-    } else if (m.compania_id) {
-      porCompania[m.compania_id] = (porCompania[m.compania_id] ?? 0) + 1
-      const regId = companiaToRegimiento[m.compania_id]
+    } else if (a.compania_id) {
+      porCompania[a.compania_id] = (porCompania[a.compania_id] ?? 0) + 1
+      const regId = companiaToRegimiento[a.compania_id]
       if (regId) porRegimiento[regId] = (porRegimiento[regId] ?? 0) + 1
-    } else if (m.regimiento_id) {
-      porRegimiento[m.regimiento_id] = (porRegimiento[m.regimiento_id] ?? 0) + 1
+    } else if (a.regimiento_id) {
+      porRegimiento[a.regimiento_id] = (porRegimiento[a.regimiento_id] ?? 0) + 1
     }
   }
 
