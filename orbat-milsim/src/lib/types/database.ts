@@ -300,6 +300,30 @@ export interface Database {
             referencedRelation: "miembros";
             referencedColumns: ["id"];
           },
+          {
+            foreignKeyName: "asignaciones_escuadra_id_fkey";
+            columns: ["escuadra_id"];
+            referencedRelation: "escuadras";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "asignaciones_peloton_id_fkey";
+            columns: ["peloton_id"];
+            referencedRelation: "pelotones";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "asignaciones_compania_id_fkey";
+            columns: ["compania_id"];
+            referencedRelation: "companias";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "asignaciones_regimiento_id_fkey";
+            columns: ["regimiento_id"];
+            referencedRelation: "regimientos";
+            referencedColumns: ["id"];
+          },
         ];
       };
 
