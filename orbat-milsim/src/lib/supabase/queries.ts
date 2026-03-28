@@ -413,25 +413,40 @@ export const getEstructura = unstable_cache(
   async (): Promise<EstructuraRegimiento[]> => {
     const supabase = createAdminClient();
 
-    const { data, error } = await supabase
-      .from("regimientos")
-      .select(
-        `
-        id, nombre, descripcion, comandante,
-        companias (
-          id, nombre, logo_url, orden,
-          pelotones (
-            id, nombre, orden,
-            escuadras (
-              id, nombre, indicativo_radio, max_miembros, orden
+    const [{ data, error }, { data: escDirectas, error: errorEsc }] = await Promise.all([
+      supabase
+        .from("regimientos")
+        .select(
+          `
+          id, nombre, descripcion, comandante,
+          companias (
+            id, nombre, logo_url, orden,
+            pelotones (
+              id, nombre, orden,
+              escuadras (
+                id, nombre, indicativo_radio, max_miembros, orden
+              )
             )
           )
+        `
         )
-      `
-      )
-      .order("nombre");
+        .order("nombre"),
+      supabase
+        .from("escuadras")
+        .select("id, nombre, indicativo_radio, max_miembros, orden, compania_id")
+        .not("compania_id", "is", null),
+    ]);
 
     if (error) throw new Error(`getEstructura: ${error.message}`);
+    if (errorEsc) throw new Error(`getEstructura (escuadras directas): ${errorEsc.message}`);
+
+    const escDirectasPorCompania = new Map<string, EstructuraEscuadra[]>();
+    for (const esc of escDirectas ?? []) {
+      if (!esc.compania_id) continue;
+      const arr = escDirectasPorCompania.get(esc.compania_id) ?? [];
+      arr.push({ id: esc.id, nombre: esc.nombre, indicativo_radio: esc.indicativo_radio, max_miembros: esc.max_miembros, orden: esc.orden });
+      escDirectasPorCompania.set(esc.compania_id, arr);
+    }
 
     return (data ?? []).map((reg) => ({
       id: reg.id,
@@ -445,7 +460,9 @@ export const getEstructura = unstable_cache(
           nombre: comp.nombre,
           logo_url: comp.logo_url,
           orden: comp.orden,
-          escuadras_directas: [],
+          escuadras_directas: (escDirectasPorCompania.get(comp.id) ?? []).sort(
+            (a, b) => a.orden - b.orden
+          ),
           pelotones: (comp.pelotones ?? [])
             .sort((a, b) => a.orden - b.orden)
             .map((pel) => ({
