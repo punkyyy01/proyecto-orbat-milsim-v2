@@ -45,11 +45,10 @@ export default async function PersonalPage({
     getMiembros(filtros),
     getEstructura(),
     getCursos(),
-    // Conteo de miembros activos por escuadra para mostrar slots disponibles
+    // Conteo de asignaciones activas por escuadra para mostrar slots disponibles
     supabase
-      .from("miembros")
+      .from("asignaciones")
       .select("escuadra_id")
-      .eq("activo", true)
       .not("escuadra_id", "is", null),
   ])
 

@@ -79,6 +79,9 @@ function buildUnidadMaps(estructura: EstructuraRegimiento[]): UnidadMaps {
     maps.regimientos.set(reg.id, reg.nombre)
     for (const comp of reg.companias) {
       maps.companias.set(comp.id, comp.nombre)
+      for (const esc of comp.escuadras_directas) {
+        maps.escuadras.set(esc.id, esc.nombre)
+      }
       for (const pel of comp.pelotones) {
         maps.pelotones.set(pel.id, pel.nombre)
         for (const esc of pel.escuadras) {

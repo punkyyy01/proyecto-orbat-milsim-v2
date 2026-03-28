@@ -17,21 +17,24 @@ export const metadata: Metadata = { title: "Estructura" }
 async function getEstructuraConConteos(): Promise<RegimientoConConteo[]> {
   const supabase = await createClient()
 
-  const [estructura, miembrosResult] = await Promise.all([
+  const [estructura, asignacionesResult] = await Promise.all([
     getEstructura(),
     supabase
-      .from("miembros")
-      .select("regimiento_id, compania_id, peloton_id, escuadra_id, nombre_milsim, rango, rol")
-      .eq("activo", true),
+      .from("asignaciones")
+      .select("regimiento_id, compania_id, peloton_id, escuadra_id, miembros!inner(nombre_milsim, rango, rol, activo)")
+      .eq("miembros.activo", true),
   ])
 
-  const asignaciones = (miembrosResult.data ?? []).map((m) => ({
-    regimiento_id: m.regimiento_id,
-    compania_id: m.compania_id,
-    peloton_id: m.peloton_id,
-    escuadra_id: m.escuadra_id,
-    miembros: { nombre_milsim: m.nombre_milsim, rango: m.rango, rol: m.rol },
-  }))
+  const asignaciones = (asignacionesResult.data ?? []).map((a) => {
+    const m = Array.isArray(a.miembros) ? a.miembros[0] : a.miembros
+    return {
+      regimiento_id: a.regimiento_id,
+      compania_id: a.compania_id,
+      peloton_id: a.peloton_id,
+      escuadra_id: a.escuadra_id,
+      miembros: m ? { nombre_milsim: m.nombre_milsim, rango: m.rango, rol: m.rol } : null,
+    }
+  })
 
   // Build lookup maps: child_id → parent_id
   const escuadraToPeloton: Record<string, string> = {}

@@ -33,7 +33,12 @@ export type MiembroOrbatPublico = Pick<
   "miembro_id" | "nombre_milsim" | "rango" | "rol" | "fecha_ingreso" | "es_principal"
 >;
 
-export type MiembroConPrincipal = MiembroRow;
+export type MiembroConPrincipal = MiembroRow & {
+  escuadra_id: string | null;
+  peloton_id: string | null;
+  compania_id: string | null;
+  regimiento_id: string | null;
+};
 
 export type OrbatEscuadra = {
   id: string;
@@ -364,7 +369,7 @@ export async function getMiembros(
 
   let query = supabase
     .from("miembros")
-    .select("*", { count: "exact" })
+    .select("*, asignaciones(escuadra_id, peloton_id, compania_id, regimiento_id, es_principal)", { count: "exact" })
     .range(from, to)
     .order("nombre_milsim");
 
@@ -373,7 +378,6 @@ export async function getMiembros(
   if (busqueda) query = query.ilike("nombre_milsim", `%${busqueda}%`);
   if (miembroIdsFilter !== null) {
     if (miembroIdsFilter.length === 0) {
-      // No hay miembros en esa unidad — forzar resultado vacío
       query = query.in("id", ["00000000-0000-0000-0000-000000000000"]);
     } else {
       query = query.in("id", miembroIdsFilter);
@@ -384,9 +388,24 @@ export async function getMiembros(
 
   if (error) throw new Error(`getMiembros: ${error.message}`);
 
+  type AsignRow = { escuadra_id: string | null; peloton_id: string | null; compania_id: string | null; regimiento_id: string | null; es_principal: boolean };
+  const mapped: MiembroConPrincipal[] = (data ?? []).map((m) => {
+    const asigns = (m.asignaciones ?? []) as AsignRow[];
+    const principal = asigns.find((a) => a.es_principal) ?? asigns[0] ?? null;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { asignaciones: _, ...rest } = m as typeof m & { asignaciones: unknown };
+    return {
+      ...rest,
+      escuadra_id: principal?.escuadra_id ?? null,
+      peloton_id: principal?.peloton_id ?? null,
+      compania_id: principal?.compania_id ?? null,
+      regimiento_id: principal?.regimiento_id ?? null,
+    };
+  });
+
   const total = count ?? 0;
   return {
-    data: (data ?? []) as MiembroConPrincipal[],
+    data: mapped,
     count: total,
     page,
     pageSize,
