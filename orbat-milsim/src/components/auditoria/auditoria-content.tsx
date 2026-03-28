@@ -106,9 +106,28 @@ function isObj(v: Json | null): v is Record<string, Json> {
   return !!v && typeof v === "object" && !Array.isArray(v)
 }
 
+const ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/
+
+function formatIsoShort(iso: string): string {
+  try {
+    const d = new Date(iso)
+    if (isNaN(d.getTime())) return iso
+    const months = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"]
+    const day  = d.getDate().toString().padStart(2, "0")
+    const mon  = months[d.getMonth()]
+    const year = d.getFullYear()
+    const hh   = d.getHours().toString().padStart(2, "0")
+    const mm   = d.getMinutes().toString().padStart(2, "0")
+    const ss   = d.getSeconds().toString().padStart(2, "0")
+    return `${day} ${mon} ${year}, ${hh}:${mm}:${ss}`
+  } catch { return iso }
+}
+
 function displayVal(v: Json | undefined): string {
   if (v === null || v === undefined) return "null"
-  if (typeof v === "string") return v
+  if (typeof v === "string") {
+    return ISO_RE.test(v) ? formatIsoShort(v) : v
+  }
   return String(v)
 }
 
@@ -222,71 +241,68 @@ function DiffViewer({
 
   return (
     <div className="space-y-1 font-mono text-xs">
-      {/* Scrollable table area */}
-      <div className="overflow-x-auto">
-        <div className="min-w-[480px]">
-          {/* Header row */}
-          <div
-            className="grid gap-2 pb-1 mb-1"
-            style={{
-              gridTemplateColumns: "25% 37.5% 37.5%",
-              borderBottom: "1px solid rgba(255,255,255,0.08)",
-            }}
-          >
-            <span className="text-slate-600 text-[10px] uppercase tracking-wider">Campo</span>
-            <span className="text-red-400/60 text-[10px] uppercase tracking-wider">Anterior</span>
-            <span className="text-green-400/60 text-[10px] uppercase tracking-wider">Nuevo</span>
-          </div>
+      {/* Header row */}
+      <div
+        className="grid gap-2 pb-1 mb-1 w-full"
+        style={{
+          gridTemplateColumns: "25% 37.5% 37.5%",
+          borderBottom: "1px solid rgba(255,255,255,0.08)",
+        }}
+      >
+        <span className="text-slate-600 text-[10px] uppercase tracking-wider">Campo</span>
+        <span className="text-red-400/60 text-[10px] uppercase tracking-wider">Anterior</span>
+        <span className="text-green-400/60 text-[10px] uppercase tracking-wider">Nuevo</span>
+      </div>
 
-          {/* Changed + optionally unchanged rows */}
-          <div className="max-h-80 overflow-y-auto space-y-0.5">
-            {displayKeys.length === 0 && (
-              <p className="text-slate-600 text-xs py-2">Sin campos para mostrar.</p>
-            )}
-            {displayKeys.map((key) => {
-              const valA    = JSON.stringify(a[key] ?? null)
-              const valD    = JSON.stringify(d[key] ?? null)
-              const changed = valA !== valD
-              const onlyInA = !(key in d)
-              const onlyInD = !(key in a)
+      {/* Changed + optionally unchanged rows */}
+      <div className="max-h-80 overflow-y-auto space-y-0.5">
+        {displayKeys.length === 0 && (
+          <p className="text-slate-600 text-xs py-2">Sin campos para mostrar.</p>
+        )}
+        {displayKeys.map((key) => {
+          const rawA    = a[key] ?? null
+          const rawD    = d[key] ?? null
+          const valA    = JSON.stringify(rawA)
+          const valD    = JSON.stringify(rawD)
+          const changed = valA !== valD
+          const onlyInA = !(key in d)
+          const onlyInD = !(key in a)
 
-              return (
-                <div
-                  key={key}
-                  className="grid gap-2 py-1 px-2 rounded"
-                  style={{
-                    gridTemplateColumns: "25% 37.5% 37.5%",
-                    background: changed ? "rgba(234,179,8,0.06)" : "transparent",
-                  }}
-                >
-                  <span className={`break-all ${changed ? "text-yellow-400/80" : "text-slate-600"}`}>
-                    {key}
-                  </span>
-                  {/* Anterior */}
-                  <span className={`break-all ${
-                    onlyInA
-                      ? "text-red-400 line-through"
-                      : changed
-                        ? "text-red-400 line-through opacity-80"
-                        : "text-slate-600"
-                  }`}>
-                    {onlyInD ? "—" : valA}
-                  </span>
-                  {/* Nuevo */}
-                  <span className={`break-all ${
-                    onlyInD
-                      ? "text-green-400"
-                      : changed
-                        ? "text-green-400"
-                        : "text-slate-600"
-                  }`}>
-                    {onlyInA ? "—" : valD}
-                  </span>
-                </div>
-              )
-            })}
-          </div>
-        </div>
+          return (
+            <div
+              key={key}
+              className="grid gap-2 py-1 px-2 rounded w-full"
+              style={{
+                gridTemplateColumns: "25% 37.5% 37.5%",
+                background: changed ? "rgba(234,179,8,0.06)" : "transparent",
+              }}
+            >
+              <span className={`break-words ${changed ? "text-yellow-400/80" : "text-slate-600"}`}>
+                {key}
+              </span>
+              {/* Anterior */}
+              <span className={`break-words ${
+                onlyInA
+                  ? "text-red-400 line-through"
+                  : changed
+                    ? "text-red-400 line-through opacity-80"
+                    : "text-slate-600"
+              }`}>
+                {onlyInD ? "—" : displayVal(rawA)}
+              </span>
+              {/* Nuevo */}
+              <span className={`break-words ${
+                onlyInD
+                  ? "text-green-400"
+                  : changed
+                    ? "text-green-400"
+                    : "text-slate-600"
+              }`}>
+                {onlyInA ? "—" : displayVal(rawD)}
+              </span>
+            </div>
+          )
+        })}
       </div>
 
       {/* Toggle unchanged — outside scroll so it's always reachable */}
@@ -551,7 +567,7 @@ export function AuditoriaContent({ logs, total, page, pageSize, filtros, usuario
       {/* Diff Dialog */}
       <Dialog open={!!selectedLog} onOpenChange={(open) => !open && setSelectedLog(null)}>
         <DialogContent
-          className="w-[calc(100vw-2rem)] max-w-4xl border"
+          className="w-[calc(100vw-2rem)] max-w-5xl border"
           style={{ background: "#0f172a", borderColor: "rgba(255,255,255,0.1)" }}
         >
           {selectedLog && (
