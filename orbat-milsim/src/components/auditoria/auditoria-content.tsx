@@ -22,7 +22,6 @@ export type AuditLogEntry = {
   datos_anteriores: Json | null
   datos_nuevos: Json | null
   usuario_id: string | null
-  usuario_email: string | null
   created_at: string
 }
 
@@ -36,8 +35,7 @@ export type AuditoriaFiltros = {
 }
 
 export type AuditUsuario = {
-  id: string | null
-  email: string
+  id: string
 }
 
 type Props = {
@@ -164,7 +162,7 @@ function exportCSV(logs: AuditLogEntry[]) {
     formatDate(log.created_at),
     log.tabla,
     log.accion,
-    log.usuario_email ?? log.usuario_id ?? "sistema",
+    log.usuario_id ?? "sistema",
     log.registro_id,
     resumen(log),
   ])
@@ -386,7 +384,7 @@ export function AuditoriaContent({ logs, total, page, pageSize, filtros, usuario
             >
               <option value="">Todos</option>
               {usuarios.map((u) => (
-                <option key={u.email} value={u.email}>{u.email}</option>
+                <option key={u.id} value={u.id}>{u.id.slice(0, 8)}…</option>
               ))}
             </select>
           </div>
@@ -484,11 +482,9 @@ export function AuditoriaContent({ logs, total, page, pageSize, filtros, usuario
                       </span>
                     </td>
                     <td className="px-4 py-3 text-xs text-slate-500">
-                      {log.usuario_email
-                        ? log.usuario_email
-                        : log.usuario_id
-                          ? <span className="font-mono">{log.usuario_id.slice(0, 8)}…</span>
-                          : <span className="text-slate-700">sistema</span>
+                      {log.usuario_id
+                        ? <span className="font-mono">{log.usuario_id.slice(0, 8)}…</span>
+                        : <span className="text-slate-700">sistema</span>
                       }
                     </td>
                     <td className="px-4 py-3 text-slate-400 text-xs max-w-xs truncate">
@@ -571,7 +567,7 @@ export function AuditoriaContent({ logs, total, page, pageSize, filtros, usuario
                   </p>
                   <p>
                     <span className="text-slate-600">Usuario:</span>{" "}
-                    <span>{selectedLog.usuario_email ?? selectedLog.usuario_id ?? "sistema"}</span>
+                    <span className="font-mono">{selectedLog.usuario_id ?? "sistema"}</span>
                   </p>
                   <p>
                     <span className="text-slate-600">Resumen:</span>{" "}

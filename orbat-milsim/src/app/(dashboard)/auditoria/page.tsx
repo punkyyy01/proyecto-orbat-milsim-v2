@@ -41,19 +41,17 @@ export default async function AuditoriaPage({
   const from = (currentPage - 1) * PAGE_SIZE
   const to   = from + PAGE_SIZE - 1
 
-  // Fetch distinct users for filter dropdown
+  // Fetch distinct users (by usuario_id) for filter dropdown
   const { data: usuariosRaw } = await supabase
     .from("audit_log")
-    .select("usuario_id, usuario_email")
-    .not("usuario_email", "is", null)
+    .select("usuario_id")
+    .not("usuario_id", "is", null)
 
-  const usuariosMap = new Map<string, AuditUsuario>()
+  const usuariosSet = new Set<string>()
   for (const u of usuariosRaw ?? []) {
-    if (u.usuario_email && !usuariosMap.has(u.usuario_email)) {
-      usuariosMap.set(u.usuario_email, { id: u.usuario_id, email: u.usuario_email })
-    }
+    if (u.usuario_id) usuariosSet.add(u.usuario_id)
   }
-  const usuarios = [...usuariosMap.values()]
+  const usuarios: AuditUsuario[] = [...usuariosSet].map(id => ({ id }))
 
   let query = supabase
     .from("audit_log")
@@ -63,7 +61,7 @@ export default async function AuditoriaPage({
 
   if (filtros.tabla)   query = query.eq("tabla",          filtros.tabla)
   if (filtros.accion)  query = query.eq("accion",         filtros.accion)
-  if (filtros.usuario) query = query.eq("usuario_email",  filtros.usuario)
+  if (filtros.usuario) query = query.eq("usuario_id",     filtros.usuario)
   if (filtros.desde)   query = query.gte("created_at",    filtros.desde)
   if (filtros.hasta)   query = query.lte("created_at",    filtros.hasta + "T23:59:59.999Z")
 
