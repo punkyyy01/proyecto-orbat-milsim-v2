@@ -57,7 +57,8 @@ export async function eliminarCurso(id: string): Promise<ActionResult> {
   const supabase = await createClient()
 
   // Delete junction rows first (in case FK doesn't cascade)
-  await supabase.from("miembro_cursos").delete().eq("curso_id", id)
+  const { error: junctionError } = await supabase.from("miembro_cursos").delete().eq("curso_id", id)
+  if (junctionError) return { error: junctionError.message }
 
   const { error } = await supabase.from("cursos").delete().eq("id", id)
   if (error) return { error: error.message }

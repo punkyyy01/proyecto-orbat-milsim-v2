@@ -43,13 +43,14 @@ export async function crearMiembro(formData: FormData): Promise<ActionResult> {
   const cursosRaw = (formData.get("cursos") as string) || ""
   const cursoIds = cursosRaw.split(",").filter(Boolean)
   if (cursoIds.length > 0 && miembro) {
-    await supabase.from("miembro_cursos").insert(
+    const { error: cursosError } = await supabase.from("miembro_cursos").insert(
       cursoIds.map((curso_id) => ({
         miembro_id: miembro.id,
         curso_id,
         fecha_completado: new Date().toISOString().split("T")[0],
       }))
     )
+    if (cursosError) return { error: cursosError.message }
   }
 
   revalidatePath("/personal")
@@ -108,17 +109,20 @@ export async function actualizarMiembro(
   if (error) return { error: error.message }
 
   // Reemplazar cursos: borrar todos y re-insertar
-  await supabase.from("miembro_cursos").delete().eq("miembro_id", id)
+  const { error: deleteError } = await supabase.from("miembro_cursos").delete().eq("miembro_id", id)
+  if (deleteError) return { error: deleteError.message }
+
   const cursosRaw = (formData.get("cursos") as string) || ""
   const cursoIds = cursosRaw.split(",").filter(Boolean)
   if (cursoIds.length > 0) {
-    await supabase.from("miembro_cursos").insert(
+    const { error: insertError } = await supabase.from("miembro_cursos").insert(
       cursoIds.map((curso_id) => ({
         miembro_id: id,
         curso_id,
         fecha_completado: new Date().toISOString().split("T")[0],
       }))
     )
+    if (insertError) return { error: insertError.message }
   }
 
   revalidatePath("/personal")

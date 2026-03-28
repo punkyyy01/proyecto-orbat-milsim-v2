@@ -61,32 +61,40 @@ function rankClass(rango: string) {
 
 // ─── Unit label helper ────────────────────────────────────────────────────────
 
-function getUnidadLabel(
-  m: MiembroRow,
-  estructura: EstructuraRegimiento[]
-): string {
-  if (m.escuadra_id) {
-    for (const reg of estructura)
-      for (const comp of reg.companias)
-        for (const pel of comp.pelotones)
-          for (const esc of pel.escuadras)
-            if (esc.id === m.escuadra_id) return esc.nombre
+type UnidadMaps = {
+  escuadras: Map<string, string>
+  pelotones: Map<string, string>
+  companias: Map<string, string>
+  regimientos: Map<string, string>
+}
+
+function buildUnidadMaps(estructura: EstructuraRegimiento[]): UnidadMaps {
+  const maps: UnidadMaps = {
+    escuadras: new Map(),
+    pelotones: new Map(),
+    companias: new Map(),
+    regimientos: new Map(),
   }
-  if (m.peloton_id) {
-    for (const reg of estructura)
-      for (const comp of reg.companias)
-        for (const pel of comp.pelotones)
-          if (pel.id === m.peloton_id) return pel.nombre
+  for (const reg of estructura) {
+    maps.regimientos.set(reg.id, reg.nombre)
+    for (const comp of reg.companias) {
+      maps.companias.set(comp.id, comp.nombre)
+      for (const pel of comp.pelotones) {
+        maps.pelotones.set(pel.id, pel.nombre)
+        for (const esc of pel.escuadras) {
+          maps.escuadras.set(esc.id, esc.nombre)
+        }
+      }
+    }
   }
-  if (m.compania_id) {
-    for (const reg of estructura)
-      for (const comp of reg.companias)
-        if (comp.id === m.compania_id) return comp.nombre
-  }
-  if (m.regimiento_id) {
-    for (const reg of estructura)
-      if (reg.id === m.regimiento_id) return reg.nombre
-  }
+  return maps
+}
+
+function getUnidadLabelFromMaps(m: MiembroRow, maps: UnidadMaps): string {
+  if (m.escuadra_id) return maps.escuadras.get(m.escuadra_id) ?? "—"
+  if (m.peloton_id) return maps.pelotones.get(m.peloton_id) ?? "—"
+  if (m.compania_id) return maps.companias.get(m.compania_id) ?? "—"
+  if (m.regimiento_id) return maps.regimientos.get(m.regimiento_id) ?? "—"
   return "—"
 }
 
@@ -297,6 +305,8 @@ export function MiembrosTable({
   const [sortCol, setSortCol] = useState<SortCol | null>(null)
   const [sortDir, setSortDir] = useState<SortDir>("asc")
 
+  const unidadMaps = useMemo(() => buildUnidadMaps(estructura), [estructura])
+
   function handleSort(col: SortCol) {
     if (sortCol === col) {
       setSortDir((d) => (d === "asc" ? "desc" : "asc"))
@@ -315,13 +325,13 @@ export function MiembrosTable({
       } else if (sortCol === "nick") {
         cmp = a.nombre_milsim.localeCompare(b.nombre_milsim)
       } else if (sortCol === "unidad") {
-        const la = getUnidadLabel(a, estructura)
-        const lb = getUnidadLabel(b, estructura)
+        const la = getUnidadLabelFromMaps(a, unidadMaps)
+        const lb = getUnidadLabelFromMaps(b, unidadMaps)
         cmp = la.localeCompare(lb)
       }
       return sortDir === "asc" ? cmp : -cmp
     })
-  }, [miembros, sortCol, sortDir, estructura])
+  }, [miembros, sortCol, sortDir, unidadMaps])
 
   function goToPage(page: number) {
     const params = new URLSearchParams(searchParams.toString())
@@ -410,7 +420,7 @@ export function MiembrosTable({
                 {/* Unidad */}
                 <TableCell className="py-2.5 hidden lg:table-cell">
                   <span className="text-slate-400 text-sm">
-                    {getUnidadLabel(m, estructura)}
+                    {getUnidadLabelFromMaps(m, unidadMaps)}
                   </span>
                 </TableCell>
 
