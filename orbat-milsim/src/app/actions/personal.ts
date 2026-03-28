@@ -55,7 +55,8 @@ export async function crearMiembro(formData: FormData): Promise<ActionResult> {
     else if (nivel === "peloton") asignacion.peloton_id = unidad_id
     else if (nivel === "escuadra") asignacion.escuadra_id = unidad_id
 
-    const { error: aError } = await supabase.from("asignaciones").insert(asignacion)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error: aError } = await supabase.from("asignaciones").insert(asignacion as any)
     if (aError) return { error: aError.message }
   }
 
