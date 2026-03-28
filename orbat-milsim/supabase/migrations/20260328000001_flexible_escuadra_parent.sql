@@ -29,7 +29,8 @@ CREATE INDEX IF NOT EXISTS escuadras_compania_id_idx ON escuadras(compania_id)
 -- La clave: COALESCE(m.compania_id, p.compania_id, e.compania_id) resuelve la
 -- compañía tanto para escuadras con pelotón como para escuadras directas.
 -- ─────────────────────────────────────────────────────────────────────────────
-CREATE OR REPLACE VIEW vista_orbat AS
+DROP VIEW IF EXISTS vista_orbat CASCADE;
+CREATE VIEW vista_orbat AS
 SELECT
   m.id                    AS miembro_id,
   m.nombre_milsim,
@@ -74,7 +75,8 @@ LEFT JOIN regimientos r ON COALESCE(m.regimiento_id, c.regimiento_id) = r.id;
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Paso 6: Recrear vista_orbat_publica (igual pero solo activos, sin datos sensibles)
 -- ─────────────────────────────────────────────────────────────────────────────
-CREATE OR REPLACE VIEW vista_orbat_publica AS
+DROP VIEW IF EXISTS vista_orbat_publica CASCADE;
+CREATE VIEW vista_orbat_publica AS
 SELECT
   m.id                    AS miembro_id,
   m.nombre_milsim,
